@@ -1,0 +1,549 @@
+package com.smartfitness.app.ui.training
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.util.Base64
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.view.PreviewView
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
+import com.google.gson.Gson
+import com.smartfitness.app.R
+import com.smartfitness.app.api.ApiClient
+import com.smartfitness.app.api.WebSocketManager
+import com.smartfitness.app.app.PlanIntent
+import com.smartfitness.app.camera.CameraCapture
+import com.smartfitness.app.camera.MjpegClient
+import com.smartfitness.app.model.CoachUpdate
+import com.smartfitness.app.model.TrainingStartRequest
+import com.smartfitness.app.model.TrainingStopRequest
+import com.smartfitness.app.model.VisionInferRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
+
+class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnInitListener {
+    private var statusView: TextView? = null
+    private var poseLogView: TextView? = null
+    private var sessionIdInput: TextInputEditText? = null
+    private var connectBtn: MaterialButton? = null
+    private var disconnectBtn: MaterialButton? = null
+    private var clearBtn: MaterialButton? = null
+    private var exerciseSpinner: Spinner? = null
+    private var deviceIdInput: TextInputEditText? = null
+    private var trainingStartBtn: MaterialButton? = null
+    private var trainingStopBtn: MaterialButton? = null
+    private var trainingStatusView: TextView? = null
+    private var esp32Preview: ImageView? = null
+    private var esp32Status: TextView? = null
+
+    private val exerciseOptions = listOf(
+        "squat" to "Squat",
+        "push_up" to "Push-up",
+        "lunge" to "Lunge",
+        "plank" to "Plank",
+        "bicep_curl" to "Bicep Curl",
+        "shoulder_press" to "Shoulder Press",
+        "jumping_jack" to "Jumping Jack"
+    )
+    private var activeExercise: String? = null
+
+    private var previewView: PreviewView? = null
+    private var cameraStatusView: TextView? = null
+    private var cameraStartBtn: MaterialButton? = null
+    private var cameraStopBtn: MaterialButton? = null
+    private var camera: CameraCapture? = null
+    private var framesPosted = 0
+    private var framesFailed = 0
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startCameraCapture()
+        } else {
+            Toast.makeText(requireContext(), "Camera permission denied", Toast.LENGTH_SHORT).show()
+            updateCameraStatus("no permission")
+        }
+    }
+
+    private var ws: WebSocketManager? = null
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private val gson = Gson()
+    private var coachFrameCount = 0L
+    @Volatile private var renderBusy = false
+
+    private var mjpegClient: MjpegClient? = null
+    @Volatile private var latestFrame: Bitmap? = null
+    @Volatile private var latestLandmarks: List<Map<String, Any?>>? = null
+    @Volatile private var latestDetected: Boolean = false
+    private var lastSpokenTip: String? = null
+    private var lastSpokenAt = 0L
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View = inflater.inflate(R.layout.fragment_training, container, false)
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        statusView = view.findViewById(R.id.status_text)
+        poseLogView = view.findViewById(R.id.pose_log)
+        sessionIdInput = view.findViewById(R.id.input_session_id)
+        connectBtn = view.findViewById(R.id.btn_connect)
+        disconnectBtn = view.findViewById(R.id.btn_disconnect)
+        clearBtn = view.findViewById(R.id.btn_clear)
+
+        exerciseSpinner = view.findViewById(R.id.spinner_exercise)
+        deviceIdInput = view.findViewById(R.id.input_device_id)
+        trainingStartBtn = view.findViewById(R.id.btn_training_start)
+        trainingStopBtn = view.findViewById(R.id.btn_training_stop)
+        trainingStatusView = view.findViewById(R.id.training_status)
+
+        esp32Preview = view.findViewById(R.id.esp32_preview)
+        esp32Status = view.findViewById(R.id.esp32_status)
+
+        exerciseSpinner?.adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            exerciseOptions.map { it.second }
+        )
+        trainingStartBtn?.setOnClickListener { startTraining() }
+        trainingStopBtn?.setOnClickListener { stopTraining() }
+
+        previewView = view.findViewById(R.id.camera_preview)
+        cameraStatusView = view.findViewById(R.id.camera_status)
+        cameraStartBtn = view.findViewById(R.id.btn_camera_start)
+        cameraStopBtn = view.findViewById(R.id.btn_camera_stop)
+
+        cameraStartBtn?.setOnClickListener { ensureCameraPermissionThenStart() }
+        cameraStopBtn?.setOnClickListener { stopCameraCapture(reason = "user stop") }
+
+        consumePlanIntent()
+        startMjpegStream()
+
+        statusView?.text = getString(R.string.status_disconnected)
+
+        tts = TextToSpeech(requireContext(), this)
+
+        sessionIdInput?.hint = "Optional session_id (leave empty for user channel)"
+
+        connectBtn?.setOnClickListener {
+            val sid = sessionIdInput?.text?.toString()?.trim().orEmpty()
+            statusView?.text = getString(R.string.status_connecting)
+            poseLogView?.text = ""
+            ws?.close()
+            ws = WebSocketManager(this)
+            if (sid.isNotEmpty()) {
+                ws?.connectSession(sid)
+                appendLog("[connecting session=${sid}]")
+            } else {
+                val uid = ApiClient.userId
+                if (uid <= 0L) {
+                    Toast.makeText(requireContext(), "Not logged in", Toast.LENGTH_SHORT).show()
+                    statusView?.text = getString(R.string.status_disconnected)
+                    return@setOnClickListener
+                }
+                ws?.connectCoach(uid)
+                appendLog("[connecting coach user_id=${uid}]")
+            }
+        }
+
+        disconnectBtn?.setOnClickListener {
+            ws?.close()
+            ws = null
+            statusView?.text = getString(R.string.status_disconnected)
+        }
+
+        clearBtn?.setOnClickListener {
+            poseLogView?.text = ""
+        }
+    }
+
+    private fun startTraining() {
+        val devId = deviceIdInput?.text?.toString()?.trim().orEmpty()
+        if (devId.isEmpty()) {
+            Toast.makeText(requireContext(), "Please fill device ID", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pos = exerciseSpinner?.selectedItemPosition ?: 0
+        val exKey = exerciseOptions.getOrNull(pos)?.first ?: "squat"
+        val exLabel = exerciseOptions.getOrNull(pos)?.second ?: exKey
+        activeExercise = exKey
+        trainingStatusView?.text = "Training: starting..."
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    ApiClient.service.trainingStart(
+                        TrainingStartRequest(deviceId = devId, exercise = exKey)
+                    )
+                }
+                if (resp.ok) {
+                    val sid = resp.active?.sessionId ?: ""
+                    trainingStatusView?.text = "Training: ${exLabel} ACTIVE (${devId})  session=${sid}"
+                    appendLog("[training] start ${exLabel} -> ${devId}")
+                    Toast.makeText(requireContext(), "Training started: ${exLabel}", Toast.LENGTH_SHORT).show()
+                    autoConnectCoachIfNeeded()
+                } else {
+                    trainingStatusView?.text = "Training: start failed ${resp.error}"
+                    Toast.makeText(requireContext(), "Failed: ${resp.error}", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                trainingStatusView?.text = "Training: error ${e.message}"
+                appendLog("[training error] ${e.message}")
+                Toast.makeText(requireContext(), "Please check login / network", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun stopTraining() {
+        val devId = deviceIdInput?.text?.toString()?.trim().orEmpty()
+        if (devId.isEmpty()) return
+        trainingStatusView?.text = "Training: stopping..."
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    ApiClient.service.trainingStop(TrainingStopRequest(deviceId = devId))
+                }
+                if (resp.ok) {
+                    trainingStatusView?.text = "Training: stopped (${devId})"
+                    appendLog("[training] stop ${devId}")
+                    Toast.makeText(requireContext(), "Device idle", Toast.LENGTH_SHORT).show()
+                    activeExercise = null
+                } else {
+                    trainingStatusView?.text = "Training: stop failed ${resp.message ?: ""}"
+                }
+            } catch (e: Exception) {
+                trainingStatusView?.text = "Training: error ${e.message}"
+                appendLog("[training error] ${e.message}")
+            }
+        }
+    }
+
+    private fun autoConnectCoachIfNeeded() {
+        val uid = ApiClient.userId
+        if (uid <= 0L) return
+        ws?.close()
+        ws = WebSocketManager(this)
+        ws?.connectCoach(uid)
+        appendLog("[auto] connect coach user_id=${uid}")
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.language = Locale.SIMPLIFIED_CHINESE
+            ttsReady = true
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        stopCameraCapture(reason = "page destroyed")
+        ws?.close()
+        ws = null
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        statusView = null
+        poseLogView = null
+        sessionIdInput = null
+        connectBtn = null
+        disconnectBtn = null
+        clearBtn = null
+        previewView = null
+        cameraStatusView = null
+        cameraStartBtn = null
+        cameraStopBtn = null
+        exerciseSpinner = null
+        deviceIdInput = null
+        trainingStartBtn = null
+        trainingStopBtn = null
+        esp32Preview = null
+        esp32Status = null
+        try { mjpegClient?.stop() } catch (_: Exception) {}
+        mjpegClient = null
+        latestFrame = null
+        trainingStatusView = null
+    }
+
+    private fun appendLog(msg: String) {
+        val act = activity ?: return
+        if (!isAdded) return
+        act.runOnUiThread {
+            val tv = poseLogView ?: return@runOnUiThread
+            val current = tv.text?.toString().orEmpty()
+            val lines = current.split('\n').toMutableList()
+            lines.add(0, msg)
+            while (lines.size > 20) lines.removeAt(lines.size - 1)
+            tv.text = lines.joinToString("\n")
+        }
+    }
+
+    private fun setStatus(text: String) {
+        val act = activity ?: return
+        if (!isAdded) return
+        act.runOnUiThread { statusView?.text = text }
+    }
+
+    override fun onOpen() {
+        setStatus(getString(R.string.status_connected))
+        val act = activity ?: return
+        if (!isAdded) return
+        act.runOnUiThread {
+            Toast.makeText(requireContext(), "Connected", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onMessage(text: String) {
+        try {
+            val upd = gson.fromJson(text, CoachUpdate::class.java)
+            if (upd?.type == "coach_update") {
+                val pretty = buildString {
+                    append("Exercise: ${upd.exerciseType ?: upd.exercise ?: "-"}")
+                    append("  reps=${upd.repCount ?: 0}")
+                    append("  score=${upd.formScore?.let { String.format("%.0f", it) } ?: "-"}")
+                    upd.coachTip?.let { append("\n  [tip] $it") }
+                    upd.feedback?.let { if (it.isNotBlank()) append("\n  [fb] $it") }
+                    if (upd.formFeedback.isNotEmpty()) {
+                        upd.formFeedback.take(2).forEach { fb ->
+                            fb.messageCn?.let { append("\n  [warn] $it") }
+                        }
+                    }
+                    upd.bodyContext?.recommendedIntensity?.let { append("  [advise: $it]") }
+                }
+                coachFrameCount++
+                if (coachFrameCount % 4L == 1L) appendLog(pretty)
+                renderEsp32Frame(upd)
+                val tip = upd.coachTip
+                val now = System.currentTimeMillis()
+                if (ttsReady && !tip.isNullOrBlank() && (tip != lastSpokenTip || now - lastSpokenAt > 8000)) {
+                    tts?.speak(tip, TextToSpeech.QUEUE_FLUSH, null, "coach")
+                    lastSpokenTip = tip
+                    lastSpokenAt = now
+                }
+                return
+            }
+            if (upd?.type in listOf("pong", "connected", "ack")) return
+        } catch (_: Exception) {}
+        appendLog(text)
+    }
+
+    override fun onClosed(code: Int, reason: String) {
+        setStatus(getString(R.string.status_disconnected))
+        appendLog("[closed $code $reason]")
+    }
+
+    override fun onFailure(t: Throwable) {
+        setStatus(getString(R.string.status_disconnected))
+        appendLog("[error ${t.message}]")
+    }
+
+    private fun consumePlanIntent() {
+        val triple = PlanIntent.consume() ?: return
+        val (planId, planName, exPair) = triple
+        val (exType, exReps) = exPair
+        val ts = System.currentTimeMillis() / 1000
+        val sid = "plan_${planId}_$ts"
+        sessionIdInput?.setText(sid)
+        appendLog("[plan] $planName  (session=$sid)")
+        if (exType != null) appendLog("[plan] first action: $exType  reps=${exReps ?: "-"}")
+        Toast.makeText(requireContext(), "Ready to start: $planName", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun ensureCameraPermissionThenStart() {
+        val ctx = context ?: return
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED) {
+            startCameraCapture()
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun startCameraCapture() {
+        val pv = previewView ?: return
+        if (camera != null) {
+            appendLog("[camera] already running")
+            return
+        }
+        framesPosted = 0
+        framesFailed = 0
+        updateCameraStatus("starting...")
+        val cap = CameraCapture(requireContext(), viewLifecycleOwner, pv)
+        camera = cap
+        cap.start(
+            intervalMs = 1500L,
+            maxWidth = 480,
+            jpegQuality = 70,
+            onFrame = { jpegB64 -> postVisionInfer(jpegB64) },
+            onError = { t ->
+                appendLog("[camera error] ${t.message}")
+                updateCameraStatus("error: ${t.message}")
+                camera = null
+            },
+        )
+        appendLog("[camera] started (1.5s/frame, max 480px)")
+    }
+
+    private fun stopCameraCapture(reason: String) {
+        val cam = camera ?: return
+        try { cam.stop() } catch (_: Exception) {}
+        camera = null
+        updateCameraStatus("stopped - $reason - sent ${framesPosted} failed ${framesFailed}")
+    }
+
+    private fun updateCameraStatus(text: String) {
+        val act = activity ?: return
+        if (!isAdded) return
+        act.runOnUiThread { cameraStatusView?.text = "Camera: $text" }
+    }
+
+    private fun postVisionInfer(jpegBase64: String) {
+        val uid = ApiClient.userId
+        if (uid <= 0L) {
+            appendLog("[infer skip] not logged in")
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val req = VisionInferRequest(
+                    image = jpegBase64,
+                    deviceId = ApiClient.getOrCreateDeviceId(),
+                    sessionId = sessionIdInput?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+                    userId = uid,
+                    backend = null,
+                )
+                val resp = withContext(Dispatchers.IO) {
+                    ApiClient.service.visionInfer(req)
+                }
+                framesPosted++
+                val det = resp.detected == true
+                val ms = resp.inferenceMs?.let { String.format("%.0f", it) } ?: "-"
+                updateCameraStatus(
+                    if (det) "detected - ${ms}ms - sent ${framesPosted}"
+                    else "no person - ${ms}ms - sent ${framesPosted}"
+                )
+            } catch (e: Exception) {
+                framesFailed++
+                appendLog("[infer fail] ${e.message}")
+                updateCameraStatus("send fail - sent ${framesPosted} failed ${framesFailed}")
+            }
+        }
+    }
+
+    private fun startMjpegStream() {
+        if (mjpegClient != null) return
+        val esp32Ip = "192.168.72.20"
+        val url = "http://$esp32Ip:81/stream"
+        appendLog("[mjpeg] connecting $url")
+        val mc = MjpegClient(
+            url = url,
+            scope = viewLifecycleOwner.lifecycleScope,
+            onFrame = { bmp ->
+                latestFrame = bmp
+                paintLatest()
+            },
+            onError = { t ->
+                if (isAdded) {
+                    esp32Status?.text = "MJPEG error: ${t.message}"
+                }
+            }
+        )
+        mjpegClient = mc
+        mc.start()
+    }
+
+    private fun paintLatest() {
+        val imgView = esp32Preview ?: return
+        if (!isAdded) return
+        if (renderBusy) return
+        val frame = latestFrame ?: return
+        val landmarks = latestLandmarks
+        val detected = latestDetected
+        renderBusy = true
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            try {
+                val canvasBmp = try {
+                    frame.copy(Bitmap.Config.ARGB_8888, true)
+                } catch (_: Exception) { frame }
+                if (landmarks != null && landmarks.isNotEmpty()) {
+                    try {
+                        val canvas = Canvas(canvasBmp)
+                        val w = canvasBmp.width.toFloat()
+                        val h = canvasBmp.height.toFloat()
+                        val dotPaint = Paint().apply {
+                            color = if (detected) Color.parseColor("#FF4081") else Color.GRAY
+                            style = Paint.Style.FILL
+                            isAntiAlias = false
+                        }
+                        val linePaint = Paint().apply {
+                            color = if (detected) Color.parseColor("#00E5FF") else Color.parseColor("#666666")
+                            strokeWidth = 3f
+                            isAntiAlias = false
+                        }
+                        val conns = intArrayOf(
+                            11, 12, 11, 13, 13, 15, 12, 14, 14, 16,
+                            11, 23, 12, 24, 23, 24,
+                            23, 25, 25, 27, 24, 26, 26, 28
+                        )
+                        fun pt(i: Int): Pair<Float, Float>? {
+                            if (i < 0 || i >= landmarks.size) return null
+                            val lm = landmarks[i]
+                            val x = (lm["x"] as? Number)?.toFloat() ?: return null
+                            val y = (lm["y"] as? Number)?.toFloat() ?: return null
+                            return Pair(x * w, y * h)
+                        }
+                        var i = 0
+                        while (i < conns.size) {
+                            val pa = pt(conns[i]); val pb = pt(conns[i + 1])
+                            if (pa != null && pb != null)
+                                canvas.drawLine(pa.first, pa.second, pb.first, pb.second, linePaint)
+                            i += 2
+                        }
+                        for (k in landmarks.indices) {
+                            val p = pt(k) ?: continue
+                            canvas.drawCircle(p.first, p.second, 4f, dotPaint)
+                        }
+                    } catch (_: Exception) {}
+                }
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    imgView.setImageBitmap(canvasBmp)
+                    val info = if (detected && landmarks != null)
+                        "Detected - ${landmarks.size} points"
+                    else
+                        "Live stream - idle"
+                    esp32Status?.text = info
+                }
+            } finally {
+                renderBusy = false
+            }
+        }
+    }
+
+    private fun renderEsp32Frame(upd: CoachUpdate) {
+        latestLandmarks = upd.landmarks
+        latestDetected = upd.detected ?: false
+        paintLatest()
+    }
+}

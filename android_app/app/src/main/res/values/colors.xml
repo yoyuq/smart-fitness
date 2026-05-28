@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#22C55E</color>
+    <color name="primary_dark">#16A34A</color>
+    <color name="accent">#FF6F00</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+
+    <!-- Training page dark theme -->
+    <color name="training_bg">#FF0A0A0F</color>
+    <color name="training_surface">#FF1B1B1F</color>
+    <color name="training_surface_alpha">#CC1B1B1F</color>
+    <color name="training_accent">#FF22C55E</color>
+    <color name="training_danger">#FFEF4444</color>
+    <color name="training_warn">#FFF59E0B</color>
+    <color name="training_text">#FFFFFFFF</color>
+    <color name="training_text_sub">#CCFFFFFF</color>
+</resources>

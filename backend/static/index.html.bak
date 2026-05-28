@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Smart Fitness · 智能健身</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root { --bg2: #1e293b; --fg: #f1f5f9;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --accent: #38bdf8;
+      --accent2: #818cf8;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+
+    html, body {
+      min-height: 100dvh;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      margin: 0; padding: 0;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+    #status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background: var(--surface);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; transition: background .3s; }
+    #status-dot.connected { background: var(--green); }
+    #status-dot.error { background: var(--red); }
+    #status-dot.connecting { background: var(--yellow); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+    #connection-info {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px; margin: 4px 12px;
+      border-radius: 8px; background: var(--surface);
+      font-size: 12px; color: var(--muted);
+    }
+
+    #viewport {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #viewport video, #viewport canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+    }
+    #viewport canvas { z-index: 2; pointer-events: none !important; }
+    #viewport video { z-index: 1; transform: scaleX(-1); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+
+    #placeholder {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      text-align: center; color: var(--muted); z-index: 1;
+    }
+    #placeholder .icon { font-size: 48px; margin-bottom: 12px; }
+    #placeholder p { font-size: 14px; line-height: 1.6; }
+
+    #stats-overlay {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      display: flex; gap: 8px; padding: 12px;
+      background: linear-gradient(transparent, rgba(15,23,42,0.95));
+      z-index: 3;
+    }
+    .stat-card {
+      flex: 1; padding: 8px;
+      border-radius: 8px; background: var(--surface);
+      text-align: center;
+    }
+    .stat-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-value.highlight { color: var(--accent); }
+
+    #score-bar-wrap {
+      position: absolute; bottom: 80px; left: 12px; right: 12px;
+      height: 6px; border-radius: 3px; background: var(--border);
+      z-index: 3; overflow: hidden;
+    }
+    #score-bar { height: 100%; width: 0%; border-radius: 3px; transition: width .3s, background .3s; }
+
+    #controls {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      min-height: 52px;
+      z-index: 1000;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg);
+      box-sizing: border-box;
+    }
+    #app { padding-bottom: 56px; }
+    #controls button {
+      flex: 1 1 auto; min-width: 0; padding: 10px 8px; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: opacity .2s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #controls button:disabled { opacity: .4; cursor: default; }
+    #btn-start { background: var(--accent); color: #0f172a; }
+    #btn-stop { background: var(--red); color: #fff; display: none; }
+    #btn-exercise { flex: none; padding: 8px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 12px; }
+    #btn-demo { font-size: 12px; padding: 8px 10px !important; flex: none !important; }
+
+    #exercise-selector {
+      display: none;
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--bg); z-index: 10;
+      overflow-y: auto;
+    }
+    #exercise-selector.open { display: block; }
+    #exercise-selector .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px; border-bottom: 1px solid var(--border);
+    }
+    #exercise-selector .header h2 { font-size: 16px; }
+    #exercise-selector .close-btn {
+      background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer;
+    }
+    .exercise-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background .2s;
+    }
+    .exercise-item:active { background: var(--surface); }
+    .exercise-item .name { font-size: 15px; font-weight: 600; }
+    .exercise-item .desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .exercise-item .check { margin-left: auto; font-size: 18px; color: var(--accent); }
+
+    #msg-toast {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      padding: 10px 20px; border-radius: 8px; background: rgba(30,41,59,0.95);
+      font-size: 13px; text-align: center; z-index: 5; pointer-events: none;
+      max-width: 80%; display: none;
+    }
+
+    @media (min-width: 375px) {
+      #header h1 { font-size: 20px; }
+      .stat-value { font-size: 26px; }
+    }
+  
+/* Auth Dialog */
+#auth-dialog { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1001; display: none; justify-content: center; align-items: center; }
+#auth-dialog.open { display: flex; }
+#auth-box { background: var(--bg2); border-radius: 16px; padding: 28px; width: 320px; max-width: 90vw; }
+#auth-box h3 { margin: 0 0 16px; font-size: 18px; }
+#auth-box input { display: block; width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 14px; }
+#auth-box .auth-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; margin-bottom: 8px; }
+#auth-box .auth-primary { background: var(--accent); color: #0f172a; }
+#auth-box .auth-secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+#auth-box .auth-error { color: var(--red); font-size: 12px; margin-bottom: 8px; display: none; }
+#auth-user { font-size: 12px; color: var(--muted); cursor: pointer; display: none; align-items: center; gap: 4px; }
+#auth-user .caret { font-size: 10px; }
+#btn-voice { font-size: 20px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg2); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+#btn-voice.muted { opacity: 0.5; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <h1>Smart Fitness</h1>
+    <div id="auth-user" title="点击登录"><span id="auth-user-name">游客</span><span class="caret">▼</span></div>
+<div id="status-badge">
+      <div id="status-dot"></div>
+      <span id="status-text">待机</span>
+    </div>
+  </div>
+
+  <div id="connection-info">
+    <span>服务器</span>
+    <span id="server-host" style="font-family:monospace;color:var(--accent)">检测中…</span>
+    <span style="margin-left:auto" id="exercise-badge">未选择动作</span>
+  </div>
+  <div id="hint-bar" style="display:none;padding:6px 12px;margin:0 12px 4px;border-radius:8px;background:rgba(251,191,36,0.15);color:#facc15;font-size:11px;text-align:center">
+    💡 首次使用：点击「🎯 动作」选动作 → 点击「开始训练」授权摄像头 → 手机距离 1-2 米
+  </div>
+
+  <div id="viewport">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+
+    <div id="placeholder">
+      <div class="icon">🏋️</div>
+      <p>点击下方「开始训练」<br>将摄像头对准全身</p>
+    </div>
+
+    <div id="stats-overlay" style="display:none">
+      <div class="stat-card">
+        <div class="stat-label">动作</div>
+        <div id="exercise-name">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">次数</div>
+        <div class="stat-value highlight" id="reps-value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">上次得分</div>
+        <div class="stat-value" id="rep-score">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">平均分</div>
+        <div class="stat-value" id="avg-score">—</div>
+      </div>
+    </div>
+
+    <div id="score-bar-wrap" style="display:none">
+      <div id="score-bar"></div>
+    </div>
+
+    <div id="msg-toast"></div>
+    <div id="workout-summary" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box">
+      <h2 style="margin:0 0 8px;color:#facc15">🏆 训练完成</h2>
+      <div style="background:#1e293b;border-radius:12px;padding:16px 24px;width:100%;max-width:280px;text-align:center">
+        <div style="margin:8px 0"><span style="color:#94a3b8">动作</span><br><span id="summary-exercise" style="font-size:20px;font-weight:700">—</span></div>
+        <div style="margin:8px 0"><span style="color:#94a3b8">完成次数</span><br><span id="summary-reps" style="font-size:32px;font-weight:700;color:#38bdf8">0</span></div>
+        <div style="margin:8px 0"><span style="color:#94a3b8">平均分</span><br><span id="summary-avg-score" style="font-size:28px;font-weight:700;color:#facc15">—</span></div>
+        <div style="margin:8px 0"><span style="color:#94a3b8">时长</span><br><span id="summary-duration" style="font-size:16px">—</span></div>
+        <div id="summary-scores-detail" style="margin:12px 0 0;max-height:120px;overflow-y:auto;font-size:12px;color:#94a3b8"></div>
+      </div>
+      <div class="btn primary" style="margin-top:16px" onclick="closeSummary()">👍 好的</div>
+    </div>
+  </div>
+
+  <!-- Exercise Selector -->
+  <div id="exercise-selector">
+    <div class="header">
+      <h2>选择目标动作</h2>
+      <button class="close-btn" id="close-exercise-selector">✕</button>
+    </div>
+    <div id="exercise-list"></div>
+    <div style="padding:12px;text-align:center;font-size:12px;color:var(--muted)">
+      不选则自动识别
+    </div>
+  
+<!-- Auth Dialog -->
+<div id="auth-dialog">
+  <div id="auth-box">
+    <h3 id="auth-title">登录</h3>
+    <div class="auth-error" id="auth-error"></div>
+    <input id="auth-username" placeholder="用户名" autocomplete="username">
+    <input id="auth-password" type="password" placeholder="密码" autocomplete="current-password">
+    <input id="auth-display-name" placeholder="昵称（可选）" style="display:none" autocomplete="nickname">
+    <button class="auth-btn auth-primary" id="auth-submit">登录</button>
+    <button class="auth-btn auth-secondary" id="auth-toggle">没有账号？注册</button>
+  </div></div>
+
+
+
+  
+</div>
+</div>
+
+<div id="controls">
+    <button id="btn-exercise" title="选择训练动作" onclick="document.getElementById('exercise-selector').style.display='block'">🎯 动作</button>
+    <button id="btn-voice" title="语音指导" onclick="var e=document.getElementById('btn-voice');var on=!VoiceCoach.isEnabled();VoiceCoach.setEnabled(on);e.textContent=on?'🔊 开':'🔊 关'">🔊</button>
+<button id="btn-start" onclick="startSession()">▶ 开始训练</button>
+      <button id="btn-demo" onclick="if(window.startDemo)startDemo()" style="display:flex;align-items:center;gap:4px;flex:none;padding:10px 14px;background:#475569;color:#fff;border:none;border-radius:10px;font-weight:600;font-size:14px;cursor:pointer" onclick="startDemo()">▶ 演示</button>
+    <button id="btn-stop" onclick="stopSession()">■ 结束训练</button>
+    <button id="btn-end" style="display:none" onclick="endWorkout()">✅ 完成训练</button>
+  </div>
+<script>
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const video          = document.getElementById('video');
+const canvas         = document.getElementById('canvas');
+const ctx            = canvas.getContext('2d');
+// Hidden canvas for capturing frames (no skeleton overlay)
+const capCanvas       = document.createElement('canvas');
+const capCtx          = capCanvas.getContext('2d');
+const placeholder    = document.getElementById('placeholder');
+const statsOvl       = document.getElementById('stats-overlay');
+const scoreBarWrap   = document.getElementById('score-bar-wrap');
+const scoreBar       = document.getElementById('score-bar');
+const exerciseEl     = document.getElementById('exercise-name');
+const repsEl         = document.getElementById('reps-value');
+const scoreEl        = document.getElementById('rep-score');
+const btnStart       = document.getElementById('btn-start');
+const btnStop        = document.getElementById('btn-stop');
+const btnExercise    = document.getElementById('btn-exercise');
+let btnVoice       = document.getElementById('btn-voice');
+
+const statusDot      = document.getElementById('status-dot');
+const statusText     = document.getElementById('status-text');
+const msgToast       = document.getElementById('msg-toast');
+const serverHost     = document.getElementById('server-host');
+const exerciseBadge  = document.getElementById('exercise-badge');
+const exerciseSel    = document.getElementById('exercise-selector');
+const exerciseList   = document.getElementById('exercise-list');
+
+let stream           = null;
+let ws               = null;
+let sessionId        = null;
+let running          = false;
+let frameTimer       = null;
+let lastKeypoints    = null;
+let reconnectTimer   = null;
+let targetExercise   = null;
+let reconnectCount   = 0;
+
+const FRAME_INTERVAL_MS = 250; // ~3 FPS
+const WS_RECONNECT_DELAY = 1500;
+
+// ── Exercises ────────────────────────────────────────────────────────────────
+const EXERCISES = [
+  { id: 'push_up',      name: '俯卧撑',      desc: '胸肌 · 三头肌 · 核心' },
+  { id: 'squat',        name: '深蹲',        desc: '股四头肌 · 臀部 · 核心' },
+  { id: 'plank',        name: '平板支撑',    desc: '核心 · 肩膀 · 背部' },
+  { id: 'lunge',        name: '弓步蹲',      desc: '腿部 · 臀部 · 核心' },
+  { id: 'pull_up',      name: '引体向上',    desc: '背部 · 二头肌 · 核心' },
+  { id: 'dumbbell_row', name: '哑铃划船',    desc: '背部 · 手臂' },
+  { id: 'shoulder_press', name: '肩推',      desc: '肩膀 · 三头肌' },
+  { id: 'bicep_curl',   name: '二头弯举',    desc: '二头肌 · 前臂' },
+];
+
+// ── Utils ────────────────────────────────────────────────────────────────────
+function genSessionId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+}
+
+function setStatus(state, text) {
+  statusDot.className = state;
+  statusText.textContent = text;
+}
+
+function setMsg(msg) {
+  if (!msg) { msgToast.style.display = 'none'; return; }
+  msgToast.textContent = msg;
+  msgToast.style.display = 'block';
+  setTimeout(() => { if (msgToast.textContent === msg) msgToast.style.display = 'none'; }, 3000);
+}
+
+function resizeCanvas() {
+  canvas.width  = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+}
+
+function buildWsUrl() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host}/ws/camera/${sessionId}`;
+}
+
+// ── Exercise Selector ────────────────────────────────────────────────────────
+function renderExercises() {
+  exerciseList.innerHTML = '';
+  EXERCISES.forEach(ex => {
+    const div = document.createElement('div');
+    div.className = 'exercise-item';
+    const checked = targetExercise === ex.id ? '✓' : '';
+    div.innerHTML = `
+      <div><div class="name">${ex.name}</div><div class="desc">${ex.desc}</div></div>
+      <div class="check">${checked}</div>
+    `;
+    div.addEventListener('click', () => selectExercise(ex.id));
+    exerciseList.appendChild(div);
+  });
+  exerciseBadge.textContent = targetExercise
+    ? EXERCISES.find(e => e.id === targetExercise)?.name || targetExercise
+    : '不限制';
+}
+
+async function selectExercise(id) {
+  targetExercise = id;
+  try {
+    await fetch('/api/exercise/target', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({exercise_type: id})
+    });
+  } catch (e) {}
+  renderExercises();
+  exerciseSel.classList.remove('open');
+}
+
+function clearExercise() {
+  targetExercise = null;
+  fetch('/api/exercise/target', { method: 'DELETE' }).catch(() => {});
+  renderExercises();
+  exerciseSel.classList.remove('open');
+}
+
+btnVoice.addEventListener('click', () => { const on = !VoiceCoach.isEnabled(); VoiceCoach.setEnabled(on); btnVoice.textContent = on ? '🔊' : '🔇'; btnVoice.classList.toggle('muted', !on); });
+btnExercise.addEventListener('click', () => {
+  renderExercises();
+  exerciseSel.classList.toggle('open');
+});
+document.getElementById('close-exercise-selector').addEventListener('click', () => {
+  exerciseSel.classList.remove('open');
+});
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
+function connectWs() {
+  if (ws) { ws.onclose = null; ws.close(); }
+  ws = new WebSocket(buildWsUrl());
+
+  function startRenderLoop() {
+    function render() {
+      if (!running) return;
+      drawMirroredFrame(lastKeypoints, canvas.width, canvas.height);
+      renderRaf = requestAnimationFrame(render);
+    }
+    renderRaf = requestAnimationFrame(render);
+  }
+  ws.onopen = () => {
+    reconnectCount = 0;
+    startRenderLoop();
+    setStatus('connected', '直播中');
+    setMsg('');
+    ws.send(JSON.stringify({ type: 'session_start', session_id: sessionId }));
+    frameTimer = setInterval(captureAndSend, FRAME_INTERVAL_MS);
+  };
+
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    handleServerMsg(msg);
+  };
+
+  ws.onerror = () => {
+    setStatus('error', '连接错误');
+    setMsg('连接异常，正在重试…');
+  };
+
+  ws.onclose = () => {
+    clearInterval(frameTimer);
+    if (running) {
+      setStatus('connecting', '重连中…');
+      let delay = Math.min(WS_RECONNECT_DELAY * (reconnectCount + 1), 10000);
+      reconnectCount++;
+      setTimeout(connectWs, delay);
+    }
+  };
+}
+
+function handleServerMsg(msg) {
+  if (msg.type === 'pose') {
+    if (msg.keypoints) lastKeypoints = msg.keypoints;
+
+    if (msg.exercise_type != null) {
+      exerciseEl.textContent = msg.exercise_type || '—';
+    }
+    if (msg.reps != null) {
+      repsEl.textContent = msg.reps;
+      VoiceCoach.onRep(msg.exercise_type, msg.reps);
+    }
+    // Per-rep score: when rep count increases, record last rep score
+    if (msg.reps != null && msg.reps > lastRepCount) {
+      lastRepCount = msg.reps;
+      const repScoreEl = document.getElementById('rep-score');
+      if (repScoreEl && msg.score != null) repScoreEl.textContent = msg.score.toFixed(1);
+    }
+    // Average score from rep_scores list
+    if (msg.rep_scores && msg.rep_scores.length > 0) {
+      const total = msg.rep_scores.reduce((s, r) => s + r.score, 0);
+      const avg = (total / msg.rep_scores.length).toFixed(1);
+      const avgEl = document.getElementById('avg-score');
+      if (avgEl) avgEl.textContent = avg;
+    }
+    // Show end button once exercise detected
+    const exerciseOk = msg.exercise_type && msg.exercise_type !== 'idle' && msg.exercise_type !== 'unknown';
+    if (msg.form_feedback) msg.form_feedback.forEach(fb => VoiceCoach.onFormFeedback(fb));
+      if (msg.form_feedback) msg.form_feedback.forEach(fb => VoiceCoach.onFormFeedback(fb));
+      if (exerciseOk) {
+      document.getElementById('btn-end').style.display = 'inline-block';
+    }
+
+    lastPoseTime = Date.now();
+    if (msg.keypoints && msg.keypoints.length > 0) {
+      drawMirroredFrame(msg.keypoints, canvas.width, canvas.height);
+    } else {
+      drawMirroredFrame(null, canvas.width, canvas.height);
+    }
+  } else if (msg.type === 'error') {
+    setMsg(msg.message || '服务器错误');
+  }
+}
+
+// ── Skeleton drawing ─────────────────────────────────────────────────────────
+const SKELETON_CONNECTIONS = [
+  [11,12], [11,13], [13,15], [12,14], [14,16],         // 手臂 + 肩膀
+  [11,23], [12,24], [23,24],                            // 躯干
+  [23,25], [25,27], [24,26], [26,28],                   // 腿
+  [0,11], [0,12],                                       // 头到肩
+];
+
+// Mirror draw for selfie camera: draw mirrored video + skeleton overlay
+function drawMirroredFrame(keypoints, w, h) {
+  // Draw mirrored video as background
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, -w, 0, w, h);
+  ctx.restore();
+
+  if (!keypoints || keypoints.length === 0) return;
+
+  const pts = keypoints.map(kp => ({
+    x: (1.0 - kp.x) * w,
+    y: kp.y * h,
+    vis: kp.visibility || 0
+  }));
+
+  // Draw connections
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  for (const [i, j] of SKELETON_CONNECTIONS) {
+    if (i >= pts.length || j >= pts.length) continue;
+    if (pts[i].vis < 0.5 || pts[j].vis < 0.5) continue;
+    ctx.beginPath();
+    ctx.moveTo(pts[i].x, pts[i].y);
+    ctx.lineTo(pts[j].x, pts[j].y);
+    ctx.stroke();
+  }
+
+  // Draw joints
+  pts.forEach((p, idx) => {
+    if (p.vis < 0.5) return;
+    const color = idx === 0 ? '#facc15' : '#818cf8';
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, idx === 0 ? 6 : 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+async function startCamera() {
+  if (stream) stopCamera();
+  const constraints = {
+    video: {
+      facingMode: 'user',
+      width:  { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 30 }
+    },
+    audio: false
+  };
+  stream = await navigator.mediaDevices.getUserMedia(constraints);
+  video.srcObject = stream;
+  await new Promise(res => { video.onloadedmetadata = res; });
+  video.play();
+  resizeCanvas();
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null;
+}
+
+let lastPoseTime = 0;
+let renderRaf = null;
+let lastRepCount = 0;
+
+function endWorkout() {
+  if (!sessionId) return;
+  fetch('/api/workout/end/' + encodeURIComponent(sessionId), {method:'POST'})
+    .then(r => r.json())
+    .then(data => {
+      stopSession();
+      showSummary(data);
+    })
+    .catch(err => { logError('保存训练: ' + err.message); stopSession(); });
+}
+
+function showSummary(data) {
+  document.getElementById('summary-exercise').textContent = data.exercise_type || '—';
+  document.getElementById('summary-reps').textContent = data.total_reps || 0;
+  document.getElementById('summary-avg-score').textContent = data.avg_score != null ? data.avg_score.toFixed(1) : '—';
+  const dur = data.duration_seconds || 0;
+  document.getElementById('summary-duration').textContent = Math.floor(dur/60) + '分' + Math.floor(dur%60) + '秒';
+  if (data.voice_summary) VoiceCoach.onWorkoutEnd(data.voice_summary);
+    if (data.voice_summary) VoiceCoach.onWorkoutEnd(data.voice_summary);
+    const detailEl = document.getElementById('summary-scores-detail');
+  detailEl.innerHTML = '';
+  if (data.rep_scores && data.rep_scores.length > 0) {
+    data.rep_scores.forEach(r => {
+      const d = document.createElement('div');
+      d.textContent = '第' + r.rep + '次: ' + r.score.toFixed(1) + '分';
+      d.style.margin = '2px 0';
+      detailEl.appendChild(d);
+    });
+  }
+  document.getElementById('workout-summary').style.display = 'flex';
+}
+
+function closeSummary() {
+  document.getElementById('workout-summary').style.display = 'none';
+}
+
+
+
+
+function captureAndSend() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  // If no server reply for 15s, reconnect
+  if (lastPoseTime > 0 && Date.now() - lastPoseTime > 15000) {
+    ws.close();
+    return;
+  }
+  // Capture to hidden canvas (no mirror) - server expects raw frame
+  capCanvas.width = canvas.width;
+  capCanvas.height = canvas.height;
+  capCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const b64 = capCanvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+  ws.send(JSON.stringify({ type: 'frame', data: b64, session_id: sessionId }));
+}
+
+// ── Session control ──────────────────────────────────────────────────────────
+async function createSession() {
+  try {
+    const r = await fetch('/api/sessions/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({device_id: 'phone-pwa', session_type: 'camera'})
+    });
+    if (r.ok) {
+      const data = await r.json();
+      return data.session_id;
+    }
+  } catch (e) {}
+  return genSessionId();
+}
+
+async function endSession(sid) {
+  if (sid && !sid.startsWith('gen-')) {
+    try { await fetch('/api/sessions/' + sid + '/end', { method: 'POST' }); } catch (e) {}
+  }
+}
+
+async function startSession() {
+  btnStart.disabled = true;
+  setMsg('启动摄像头…');
+
+  try {
+    sessionId = await createSession();
+    await startCamera();
+
+    placeholder.style.display  = 'none';
+    statsOvl.style.display     = 'flex';
+    scoreBarWrap.style.display = 'block';
+    btnStart.style.display     = 'none';
+    btnStop.style.display      = 'block';
+    VoiceCoach.countdown();
+    VoiceCoach.countdown();
+
+    running = true;
+    lastKeypoints = null;
+    repsEl.textContent     = '0';
+    scoreEl.textContent    = '—';
+    scoreBar.style.width   = '0%';
+    exerciseEl.textContent = '—';
+
+    connectWs();
+  } catch (err) {
+    btnStart.disabled = false;
+    setMsg(err.name === 'NotAllowedError'
+      ? '摄像头权限被拒绝，请在浏览器设置中允许'
+      : '摄像头错误：' + err.message);
+    setStatus('', '待机');
+  }
+}
+
+function stopSession() {
+  running = false;
+  clearInterval(frameTimer);
+  if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = null; }
+
+  const sid = sessionId;
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  endSession(sid);
+  stopCamera();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  placeholder.style.display  = 'block';
+  statsOvl.style.display     = 'none';
+  scoreBarWrap.style.display = 'none';
+  btnStop.style.display      = 'none';
+  btnStart.style.display     = 'block';
+  btnStart.disabled          = false;
+
+  setStatus('', '待机');
+}
+
+btnStart.addEventListener('click', startSession);
+btnStop.addEventListener('click', stopSession);
+
+
+// ── Auth UI ────────────────────────────────────────────────────────────────
+let authToken = localStorage.getItem('auth_token') || '';
+let authUser = localStorage.getItem('auth_username') || '';
+const authDialog = document.getElementById('auth-dialog');
+const authUserEl = document.getElementById('auth-user');
+const authUserNameEl = document.getElementById('auth-user-name');
+const authTitle = document.getElementById('auth-title');
+const authError = document.getElementById('auth-error');
+const authUsername = document.getElementById('auth-username');
+const authPassword = document.getElementById('auth-password');
+const authDisplayName = document.getElementById('auth-display-name');
+const authSubmit = document.getElementById('auth-submit');
+const authToggle = document.getElementById('auth-toggle');
+let isRegister = false;
+
+function updateAuthUI() {
+  if (authToken && authUser) {
+    authUserNameEl.textContent = authUser;
+    authUserEl.style.display = 'flex';
+  } else {
+    authUserNameEl.textContent = '游客';
+    authUserEl.style.display = 'flex';
+  }
+}
+updateAuthUI();
+
+authUserEl.addEventListener('click', () => {
+  if (authToken) {
+    if (confirm('退出登录？')) { authToken = ''; authUser = ''; localStorage.removeItem('auth_token'); localStorage.removeItem('auth_username'); updateAuthUI(); }
+  } else {
+    openAuthDialog();
+  }
+});
+
+function openAuthDialog() {
+  isRegister = false;
+  authTitle.textContent = '登录';
+  authSubmit.textContent = '登录';
+  authToggle.textContent = '没有账号？注册';
+  authDisplayName.style.display = 'none';
+  authError.style.display = 'none';
+  authDialog.classList.add('open');
+}
+
+authToggle.addEventListener('click', () => {
+  isRegister = !isRegister;
+  if (isRegister) {
+    authTitle.textContent = '注册';
+    authSubmit.textContent = '注册';
+    authToggle.textContent = '已有账号？登录';
+    authDisplayName.style.display = 'block';
+  } else {
+    authTitle.textContent = '登录';
+    authSubmit.textContent = '登录';
+    authToggle.textContent = '没有账号？注册';
+    authDisplayName.style.display = 'none';
+  }
+  authError.style.display = 'none';
+});
+
+authSubmit.addEventListener('click', async () => {
+  const u = authUsername.value.trim();
+  const p = authPassword.value.trim();
+  if (!u || !p) { authError.textContent = '请填写用户名和密码'; authError.style.display = 'block'; return; }
+  authError.style.display = 'none';
+  const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+  const body = { username: u, password: p };
+  if (isRegister) body.display_name = authDisplayName.value.trim() || u;
+  try {
+    const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await r.json();
+    if (!r.ok) { authError.textContent = data.detail || data.message || '操作失败'; authError.style.display = 'block'; return; }
+    authToken = data.token;
+    authUser = data.username;
+    localStorage.setItem('auth_token', authToken);
+    localStorage.setItem('auth_username', authUser);
+    updateAuthUI();
+    authDialog.classList.remove('open');
+}
+authDialog.addEventListener('click', e => { if (e.target === authDialog) authDialog.classList.remove('open'); 
+}
+authDialog.addEventListener('click', e => { if (e.target === authDialog) authDialog.classList.remove('open');
+}
+authDialog.addEventListener('click', e => { if (e.target === authDialog) authDialog.classList.remove('open');  
+    showToast(isRegister ? '注册成功！' : '登录成功！');
+  } catch (e) {
+    authError.textContent = '网络错误：' + e.message;
+    authError.style.display = 'block';
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+// Show server address and hint
+serverHost.textContent = location.host;
+const hintBar = document.getElementById('hint-bar');
+if (hintBar && !localStorage.getItem('sf_hint_dismissed')) {
+  hintBar.style.display = 'block';
+  setTimeout(() => { hintBar.style.display = 'none'; }, 8000);
+  hintBar.addEventListener('click', () => {
+    hintBar.style.display = 'none';
+    localStorage.setItem('sf_hint_dismissed', '1');
+  });
+}
+
+// LAN IP detection via WebRTC
+try {
+  const pc = new RTCPeerConnection({iceServers: []});
+  pc.createDataChannel('');
+  pc.createOffer().then(sdp => pc.setLocalDescription(sdp));
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      const m = e.candidate.candidate.match(/([0-9]{1,3}(?:\.[0-9]{1,3}){3})/);
+      if (m && m[1] !== '127.0.0.1') {
+        serverHost.textContent = m[1] + ':8080';
+      }
+      pc.close();
+    }
+  };
+} catch(e) {}
+
+
+// ── Demo Mode ──────────────────────────────────────────────────────────────────
+let demoInterval = null;
+function startDemo() {
+  if (demoInterval) return;
+  setStatus('running', '延伸前的热身展示');
+  setMsg('演示模式 — 模拟数据中...');
+
+  const exercises = ['squat', 'push_up', 'lunge', 'bicep_curl', 'shoulder_press'];
+  let idx = 0, dir = 1, repC = 0, exN = 0;
+
+  if (demoInterval) clearInterval(demoInterval);
+  demoInterval = setInterval(() => {
+    idx += dir * 10;
+    if (idx > 80) { dir = -1; repC++; }
+    if (idx < 10) { dir = 1; if (repC > 3) { repC = 0; exN = (exN + 1) % exercises.length; } }
+
+    const exercise = exercises[exN];
+    const score = 100 - idx * 0.5;
+    updateUI({
+      type: 'pose',
+      pose_detected: true,
+      score: Math.max(0, score),
+      exercise_type: exercise,
+      reps: repC,
+      keypoints: []
+    });
+  }, 300);
+}
+
+// Override stopSession to also stop demo
+const _origStopSession = stopSession;
+stopSession = function() {
+  if (demoInterval) { clearInterval(demoInterval); demoInterval = null; }
+  _origStopSession();
+};
+
+// PWA Service Worker registration
+if ('serviceWorker' in navigator) {
+  const swCode = `
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+self.addEventListener('fetch', e => {
+  if (e.request.url.includes('/ws/')) return;
+  e.respondWith(fetch(e.request).catch(() => new Response('Offline', {status: 503})));
+});
+  `.trim();
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, { scope: '/' }).catch(() => {});
+}
+
+// ── Voice Coach (Web Speech API) ──────────────────────────────────────────
+const VoiceCoach = (() => {
+  let enabled = true;
+  let lastSpokenAt = 0;
+  const REP_GAP_MS = 1500;
+  let voice = null;
+  function _pickVoice() {
+    const vs = speechSynthesis.getVoices();
+    voice = vs.find(v => v.lang === 'zh-CN' || v.lang.startsWith('zh'));
+  }
+  async function init() {
+    _pickVoice();
+    speechSynthesis.onvoiceschanged = _pickVoice;
+  }
+  function speak(text, opts) {
+    opts = opts || {};
+    if (!enabled || !text) return;
+    const now = Date.now();
+    if (!opts.preempt && now - lastSpokenAt < REP_GAP_MS) return;
+    if (opts.preempt) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    if (voice) u.voice = voice;
+    u.rate = opts.rate || 1.05;
+    speechSynthesis.speak(u);
+    lastSpokenAt = now;
+  }
+  async function countdown() {
+    for (const w of ['三', '二', '一', '开始！']) {
+      speak(w, { preempt: true });
+      await new Promise(r => setTimeout(r, 700));
+    }
+  }
+  function onRep(exercise, repCount) {
+    if (repCount > 0 && repCount <= 3) {
+      const msgs = ['第一个', '第二个', '第三个'];
+      speak(msgs[repCount - 1], { preempt: true });
+    } else if (repCount > 0 && repCount % 5 === 0) {
+      speak('已完成' + repCount + '个', { preempt: true });
+    }
+  }
+  function onFormFeedback(fb) {
+    if (!fb || !fb.message_cn) return;
+    speak(fb.message_cn, { preempt: fb.severity === 'critical' });
+  }
+  function onWorkoutEnd(summaryText) {
+    speak(summaryText, { preempt: true, rate: 0.95 });
+  }
+  function setEnabled(v) { enabled = v; if (!v) speechSynthesis.cancel(); }
+  function isEnabled() { return enabled; }
+  return { init, speak, countdown, onRep, onFormFeedback, onWorkoutEnd, setEnabled, isEnabled };
+})();
+VoiceCoach.init();
+</script>
+
+
+
+
+<button id="test-btn" onclick="alert('CLICKED!')" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;padding:16px 32px;background:red;color:white;font-size:20px;border:none;border-radius:12px">🛑 TEST CLICK ME</button>
+</body>
+</html>

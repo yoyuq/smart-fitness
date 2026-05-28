@@ -1,0 +1,1137 @@
+{
+  "train_acc": 0.999965184695192,
+  "test_acc": 0.980086338950007,
+  "n_train": 28723,
+  "n_test": 7181,
+  "labels": [
+    "squat",
+    "push_up",
+    "plank",
+    "lunge",
+    "jumping_jack",
+    "bicep_curl",
+    "shoulder_press"
+  ],
+  "clips_used": [
+    {
+      "file": "real_jumping_jack_UpH7rm0cYbM.npz",
+      "T": 1194,
+      "label": 4
+    },
+    {
+      "file": "real_jumping_jack_c4DAnQ6DtF8.npz",
+      "T": 205,
+      "label": 4
+    },
+    {
+      "file": "real_jumping_jack_iSSAk4XCsRA.npz",
+      "T": 421,
+      "label": 4
+    },
+    {
+      "file": "real_lunge_L8fvypPrzzs.npz",
+      "T": 385,
+      "label": 3
+    },
+    {
+      "file": "real_lunge_QOVaHwm-Q6U.npz",
+      "T": 1026,
+      "label": 3
+    },
+    {
+      "file": "real_lunge_eFWCn5iEbTU.npz",
+      "T": 118,
+      "label": 3
+    },
+    {
+      "file": "real_lunge_wrwwXE_x-pQ.npz",
+      "T": 1517,
+      "label": 3
+    },
+    {
+      "file": "real_plank_B296mZDhrP4.npz",
+      "T": 926,
+      "label": 2
+    },
+    {
+      "file": "real_plank_pSHjTRCQxIw.npz",
+      "T": 712,
+      "label": 2
+    },
+    {
+      "file": "real_push_up_0pkjOk0EiAk.npz",
+      "T": 673,
+      "label": 1
+    },
+    {
+      "file": "real_push_up_WDIpL0pjun0.npz",
+      "T": 163,
+      "label": 1
+    },
+    {
+      "file": "real_push_up__l3ySVKYVJ8.npz",
+      "T": 323,
+      "label": 1
+    },
+    {
+      "file": "real_squat_Dy28eq2PjcM.npz",
+      "T": 1109,
+      "label": 0
+    },
+    {
+      "file": "real_squat_YaXPRqUwItQ.npz",
+      "T": 1744,
+      "label": 0
+    },
+    {
+      "file": "synth_bicep_curl_000.npz",
+      "T": 128,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_001.npz",
+      "T": 123,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_002.npz",
+      "T": 119,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_003.npz",
+      "T": 112,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_004.npz",
+      "T": 111,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_005.npz",
+      "T": 131,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_006.npz",
+      "T": 118,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_007.npz",
+      "T": 140,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_008.npz",
+      "T": 111,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_009.npz",
+      "T": 125,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_010.npz",
+      "T": 108,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_011.npz",
+      "T": 109,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_012.npz",
+      "T": 117,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_013.npz",
+      "T": 114,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_014.npz",
+      "T": 107,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_015.npz",
+      "T": 109,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_016.npz",
+      "T": 126,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_017.npz",
+      "T": 107,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_018.npz",
+      "T": 102,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_019.npz",
+      "T": 119,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_020.npz",
+      "T": 125,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_021.npz",
+      "T": 139,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_022.npz",
+      "T": 114,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_023.npz",
+      "T": 130,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_024.npz",
+      "T": 129,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_025.npz",
+      "T": 103,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_026.npz",
+      "T": 133,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_027.npz",
+      "T": 136,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_028.npz",
+      "T": 140,
+      "label": 5
+    },
+    {
+      "file": "synth_bicep_curl_029.npz",
+      "T": 118,
+      "label": 5
+    },
+    {
+      "file": "synth_jumping_jack_000.npz",
+      "T": 115,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_001.npz",
+      "T": 134,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_002.npz",
+      "T": 123,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_003.npz",
+      "T": 131,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_004.npz",
+      "T": 114,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_005.npz",
+      "T": 114,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_006.npz",
+      "T": 124,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_007.npz",
+      "T": 124,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_008.npz",
+      "T": 126,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_009.npz",
+      "T": 117,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_010.npz",
+      "T": 109,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_011.npz",
+      "T": 106,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_012.npz",
+      "T": 127,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_013.npz",
+      "T": 135,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_014.npz",
+      "T": 125,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_015.npz",
+      "T": 128,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_016.npz",
+      "T": 140,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_017.npz",
+      "T": 135,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_018.npz",
+      "T": 100,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_019.npz",
+      "T": 128,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_020.npz",
+      "T": 111,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_021.npz",
+      "T": 119,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_022.npz",
+      "T": 123,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_023.npz",
+      "T": 106,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_024.npz",
+      "T": 123,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_025.npz",
+      "T": 120,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_026.npz",
+      "T": 116,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_027.npz",
+      "T": 107,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_028.npz",
+      "T": 139,
+      "label": 4
+    },
+    {
+      "file": "synth_jumping_jack_029.npz",
+      "T": 117,
+      "label": 4
+    },
+    {
+      "file": "synth_lunge_000.npz",
+      "T": 129,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_001.npz",
+      "T": 137,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_002.npz",
+      "T": 113,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_003.npz",
+      "T": 139,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_004.npz",
+      "T": 131,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_005.npz",
+      "T": 101,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_006.npz",
+      "T": 115,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_007.npz",
+      "T": 127,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_008.npz",
+      "T": 129,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_009.npz",
+      "T": 104,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_010.npz",
+      "T": 138,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_011.npz",
+      "T": 104,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_012.npz",
+      "T": 103,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_013.npz",
+      "T": 121,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_014.npz",
+      "T": 133,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_015.npz",
+      "T": 115,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_016.npz",
+      "T": 126,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_017.npz",
+      "T": 120,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_018.npz",
+      "T": 123,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_019.npz",
+      "T": 119,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_020.npz",
+      "T": 124,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_021.npz",
+      "T": 135,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_022.npz",
+      "T": 124,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_023.npz",
+      "T": 131,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_024.npz",
+      "T": 107,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_025.npz",
+      "T": 117,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_026.npz",
+      "T": 126,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_027.npz",
+      "T": 123,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_028.npz",
+      "T": 113,
+      "label": 3
+    },
+    {
+      "file": "synth_lunge_029.npz",
+      "T": 114,
+      "label": 3
+    },
+    {
+      "file": "synth_plank_000.npz",
+      "T": 128,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_001.npz",
+      "T": 107,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_002.npz",
+      "T": 100,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_003.npz",
+      "T": 120,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_004.npz",
+      "T": 121,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_005.npz",
+      "T": 114,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_006.npz",
+      "T": 115,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_007.npz",
+      "T": 137,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_008.npz",
+      "T": 129,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_009.npz",
+      "T": 112,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_010.npz",
+      "T": 138,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_011.npz",
+      "T": 128,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_012.npz",
+      "T": 103,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_013.npz",
+      "T": 128,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_014.npz",
+      "T": 130,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_015.npz",
+      "T": 132,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_016.npz",
+      "T": 104,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_017.npz",
+      "T": 117,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_018.npz",
+      "T": 123,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_019.npz",
+      "T": 122,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_020.npz",
+      "T": 100,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_021.npz",
+      "T": 112,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_022.npz",
+      "T": 130,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_023.npz",
+      "T": 126,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_024.npz",
+      "T": 109,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_025.npz",
+      "T": 131,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_026.npz",
+      "T": 138,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_027.npz",
+      "T": 137,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_028.npz",
+      "T": 128,
+      "label": 2
+    },
+    {
+      "file": "synth_plank_029.npz",
+      "T": 140,
+      "label": 2
+    },
+    {
+      "file": "synth_push_up_000.npz",
+      "T": 129,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_001.npz",
+      "T": 115,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_002.npz",
+      "T": 112,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_003.npz",
+      "T": 134,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_004.npz",
+      "T": 126,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_005.npz",
+      "T": 118,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_006.npz",
+      "T": 126,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_007.npz",
+      "T": 128,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_008.npz",
+      "T": 138,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_009.npz",
+      "T": 112,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_010.npz",
+      "T": 129,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_011.npz",
+      "T": 103,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_012.npz",
+      "T": 106,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_013.npz",
+      "T": 134,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_014.npz",
+      "T": 131,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_015.npz",
+      "T": 133,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_016.npz",
+      "T": 130,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_017.npz",
+      "T": 117,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_018.npz",
+      "T": 132,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_019.npz",
+      "T": 140,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_020.npz",
+      "T": 107,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_021.npz",
+      "T": 115,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_022.npz",
+      "T": 137,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_023.npz",
+      "T": 121,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_024.npz",
+      "T": 133,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_025.npz",
+      "T": 109,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_026.npz",
+      "T": 121,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_027.npz",
+      "T": 115,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_028.npz",
+      "T": 130,
+      "label": 1
+    },
+    {
+      "file": "synth_push_up_029.npz",
+      "T": 130,
+      "label": 1
+    },
+    {
+      "file": "synth_shoulder_press_000.npz",
+      "T": 104,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_001.npz",
+      "T": 123,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_002.npz",
+      "T": 104,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_003.npz",
+      "T": 129,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_004.npz",
+      "T": 139,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_005.npz",
+      "T": 119,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_006.npz",
+      "T": 138,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_007.npz",
+      "T": 136,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_008.npz",
+      "T": 113,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_009.npz",
+      "T": 102,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_010.npz",
+      "T": 102,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_011.npz",
+      "T": 133,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_012.npz",
+      "T": 104,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_013.npz",
+      "T": 111,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_014.npz",
+      "T": 102,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_015.npz",
+      "T": 108,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_016.npz",
+      "T": 112,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_017.npz",
+      "T": 112,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_018.npz",
+      "T": 120,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_019.npz",
+      "T": 102,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_020.npz",
+      "T": 124,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_021.npz",
+      "T": 132,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_022.npz",
+      "T": 124,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_023.npz",
+      "T": 128,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_024.npz",
+      "T": 109,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_025.npz",
+      "T": 136,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_026.npz",
+      "T": 127,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_027.npz",
+      "T": 127,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_028.npz",
+      "T": 132,
+      "label": 6
+    },
+    {
+      "file": "synth_shoulder_press_029.npz",
+      "T": 111,
+      "label": 6
+    },
+    {
+      "file": "synth_squat_000.npz",
+      "T": 121,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_001.npz",
+      "T": 123,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_002.npz",
+      "T": 107,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_003.npz",
+      "T": 106,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_004.npz",
+      "T": 107,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_005.npz",
+      "T": 111,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_006.npz",
+      "T": 130,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_007.npz",
+      "T": 115,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_008.npz",
+      "T": 109,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_009.npz",
+      "T": 118,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_010.npz",
+      "T": 109,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_011.npz",
+      "T": 116,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_012.npz",
+      "T": 109,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_013.npz",
+      "T": 133,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_014.npz",
+      "T": 111,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_015.npz",
+      "T": 138,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_016.npz",
+      "T": 122,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_017.npz",
+      "T": 136,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_018.npz",
+      "T": 125,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_019.npz",
+      "T": 110,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_020.npz",
+      "T": 135,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_021.npz",
+      "T": 133,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_022.npz",
+      "T": 135,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_023.npz",
+      "T": 109,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_024.npz",
+      "T": 110,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_025.npz",
+      "T": 137,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_026.npz",
+      "T": 106,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_027.npz",
+      "T": 131,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_028.npz",
+      "T": 101,
+      "label": 0
+    },
+    {
+      "file": "synth_squat_029.npz",
+      "T": 122,
+      "label": 0
+    }
+  ]
+}

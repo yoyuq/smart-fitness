@@ -1,0 +1,1808 @@
+[
+  {
+    "file": "synth_squat_000.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 123,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_001.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_002.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 100,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_003.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 120,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_004.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 132,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_005.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 126,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_006.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 134,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_007.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_008.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_009.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 138,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_010.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 139,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_011.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_012.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 134,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_013.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_014.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_015.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 118,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_016.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 110,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_017.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 135,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_018.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 131,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_019.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 125,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_020.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_021.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_022.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_023.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_024.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_025.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_026.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_027.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_028.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_squat_029.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_000.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 113,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_001.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_002.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 101,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_003.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_004.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 139,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_005.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 115,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_006.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 121,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_007.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_008.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 105,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_009.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 120,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_010.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_011.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 122,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_012.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_013.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 108,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_014.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 119,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_015.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 137,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_016.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 100,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_017.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 113,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_018.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_019.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_020.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 137,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_021.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 105,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_022.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 108,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_023.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_024.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 134,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_025.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 123,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_026.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 138,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_027.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 116,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_028.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 138,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_push_up_029.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 122,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_000.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 119,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_001.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 133,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_002.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 135,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_003.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 136,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_004.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 125,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_005.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 101,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_006.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 121,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_007.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 120,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_008.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_009.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_010.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 136,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_011.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 134,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_012.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 118,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_013.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_014.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 106,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_015.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 104,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_016.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 134,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_017.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_018.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 115,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_019.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 128,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_020.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_021.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_022.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 138,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_023.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_024.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_025.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 114,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_026.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_027.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 126,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_028.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_plank_029.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 135,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_000.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 118,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_001.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 128,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_002.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_003.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 125,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_004.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 136,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_005.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_006.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 122,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_007.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 128,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_008.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 124,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_009.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_010.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 124,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_011.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 132,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_012.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 134,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_013.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_014.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_015.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 124,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_016.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_017.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 131,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_018.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 108,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_019.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_020.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_021.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 119,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_022.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 101,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_023.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 110,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_024.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_025.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 140,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_026.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 123,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_027.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_028.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_lunge_029.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 128,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_000.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 114,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_001.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 126,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_002.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 140,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_003.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 131,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_004.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 116,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_005.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_006.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 126,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_007.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 138,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_008.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_009.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 132,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_010.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 137,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_011.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 137,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_012.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 137,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_013.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 118,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_014.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 123,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_015.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 114,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_016.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 104,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_017.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_018.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 133,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_019.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_020.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 114,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_021.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_022.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_023.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 110,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_024.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 137,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_025.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 126,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_026.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 105,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_027.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 124,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_028.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_jumping_jack_029.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "real_squat_Dy28eq2PjcM.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 1109,
+    "fps": 10.0,
+    "video_id": "Dy28eq2PjcM",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_squat_YaXPRqUwItQ.npz",
+    "label": "squat",
+    "label_id": 0,
+    "T": 1744,
+    "fps": 10.0,
+    "video_id": "YaXPRqUwItQ",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_push_up_0pkjOk0EiAk.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 673,
+    "fps": 10.0,
+    "video_id": "0pkjOk0EiAk",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_push_up_WDIpL0pjun0.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 163,
+    "fps": 10.0,
+    "video_id": "WDIpL0pjun0",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_push_up__l3ySVKYVJ8.npz",
+    "label": "push_up",
+    "label_id": 1,
+    "T": 323,
+    "fps": 10.0,
+    "video_id": "_l3ySVKYVJ8",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_plank_B296mZDhrP4.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 926,
+    "fps": 10.0,
+    "video_id": "B296mZDhrP4",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_plank_pSHjTRCQxIw.npz",
+    "label": "plank",
+    "label_id": 2,
+    "T": 712,
+    "fps": 10.0,
+    "video_id": "pSHjTRCQxIw",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_lunge_L8fvypPrzzs.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 385,
+    "fps": 10.0,
+    "video_id": "L8fvypPrzzs",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_lunge_QOVaHwm-Q6U.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 1026,
+    "fps": 10.0,
+    "video_id": "QOVaHwm-Q6U",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_lunge_eFWCn5iEbTU.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 118,
+    "fps": 10.0,
+    "video_id": "eFWCn5iEbTU",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_lunge_wrwwXE_x-pQ.npz",
+    "label": "lunge",
+    "label_id": 3,
+    "T": 1517,
+    "fps": 10.0,
+    "video_id": "wrwwXE_x-pQ",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_jumping_jack_UpH7rm0cYbM.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 1194,
+    "fps": 10.0,
+    "video_id": "UpH7rm0cYbM",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_jumping_jack_c4DAnQ6DtF8.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 205,
+    "fps": 10.0,
+    "video_id": "c4DAnQ6DtF8",
+    "source": "real_youtube"
+  },
+  {
+    "file": "real_jumping_jack_iSSAk4XCsRA.npz",
+    "label": "jumping_jack",
+    "label_id": 4,
+    "T": 421,
+    "fps": 10.0,
+    "video_id": "iSSAk4XCsRA",
+    "source": "real_youtube"
+  },
+  {
+    "file": "synth_bicep_curl_000.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 128,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_001.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 123,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_002.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 119,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_003.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_004.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_005.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 131,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_006.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 118,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_007.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 140,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_008.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_009.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 125,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_010.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 108,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_011.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_012.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 117,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_013.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 114,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_014.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_015.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_016.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 126,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_017.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 107,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_018.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_019.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 119,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_020.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 125,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_021.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 139,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_022.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 114,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_023.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 130,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_024.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_025.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 103,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_026.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 133,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_027.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 136,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_028.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 140,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_bicep_curl_029.npz",
+    "label": "bicep_curl",
+    "label_id": 5,
+    "T": 118,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_000.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 104,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_001.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 123,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_002.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 104,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_003.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 129,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_004.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 139,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_005.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 119,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_006.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 138,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_007.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 136,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_008.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 113,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_009.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_010.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_011.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 133,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_012.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 104,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_013.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_014.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_015.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 108,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_016.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_017.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 112,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_018.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 120,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_019.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 102,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_020.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 124,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_021.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 132,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_022.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 124,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_023.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 128,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_024.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 109,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_025.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 136,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_026.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_027.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 127,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_028.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 132,
+    "fps": 10.0,
+    "synth": true
+  },
+  {
+    "file": "synth_shoulder_press_029.npz",
+    "label": "shoulder_press",
+    "label_id": 6,
+    "T": 111,
+    "fps": 10.0,
+    "synth": true
+  }
+]

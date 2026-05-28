@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Smart Fitness</string>
+
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="login">Login</string>
+    <string name="register">Register</string>
+    <string name="no_account_register">Don\'t have an account? Register</string>
+    <string name="have_account_login">Already have an account? Login</string>
+    <string name="logout">Log out</string>
+
+    <string name="home">Home</string>
+    <string name="training">Training</string>
+    <string name="plans">Plans</string>
+    <string name="profile">Profile</string>
+
+    <string name="today_summary">Today\'s Summary</string>
+    <string name="sessions">Sessions</string>
+    <string name="total_reps">Total Reps</string>
+    <string name="total_minutes">Minutes</string>
+    <string name="avg_score">Avg Score</string>
+    <string name="recent_plans">Recent Plans</string>
+    <string name="no_plans">No plans yet</string>
+
+    <string name="training_session">Training Session</string>
+    <string name="session_id">Session ID</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="status">Status</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="pose_updates">Pose Updates</string>
+
+    <string name="add_plan">Add Plan</string>
+    <string name="my_plans">My Plans</string>
+    <string name="create">Create</string>
+    <string name="refresh">Refresh</string>
+    <string name="delete">Delete</string>
+
+    <string name="devices">Devices</string>
+    <string name="no_devices">No devices registered</string>
+    <string name="register_device">Register This Phone</string>
+    <string name="clear">Clear</string>
+</resources>

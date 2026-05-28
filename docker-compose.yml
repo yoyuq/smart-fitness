@@ -1,0 +1,67 @@
+# Docker Compose for Smart Fitness Guidance System
+# 
+# Services:
+#   - mosquitto: MQTT message broker
+#   - backend:   FastAPI application server
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose logs -f            # View logs
+#   docker-compose down               # Stop all services
+#
+# Framework: Docker Compose
+#   Source: https://github.com/docker/compose (Apache 2.0)
+
+version: "3.8"
+
+services:
+  # MQTT Message Broker
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: fitness-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # MQTT (unencrypted)
+      - "9001:9001"   # MQTT over WebSocket
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/broker/uptime' -C 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./
+      dockerfile: backend/Dockerfile
+    container_name: fitness-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP API
+      - "8443:8443"   # HTTPS (camera access)
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - DB_PATH=/data/fitness.db
+      - JWT_SECRET=smart-fitness-jwt-secret-change-me
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+    volumes:
+      - backend_data:/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  backend_data:

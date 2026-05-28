@@ -1,0 +1,109 @@
+# Build output
+android_app/app/build/
+android_app/.gradle/
+android_app/build/
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+*.apk
+edge_esp32cam/build/
+
+# Binary / large files
+*.pkl
+*.db
+*.mp4
+*.onnx
+*.pt
+*.elf
+*.map
+
+# IDE
+.idea/
+*.iml
+
+# Temp scripts and files
+_*.py
+_*.ps1
+_*.json
+_*.txt
+_*.b64
+ut*.xml
+u*.xml
+uc*.xml
+ui*.xml
+ui[0-9].xml
+_sc*.png
+_training*.png
+s2.png
+screen1.png
+screenshot.png
+build_*.log
+backend_run.log
+_stick.*
+write_audit.ps1
+check_index.py
+fix_quotes.py
+test_debug.py
+test_stress.py
+test_vision_infer.py
+test_ws_final.py
+test_ws_simulate.py
+test_yolo_preview.py
+yolo_preview.py
+quant_backtest.py
+quant_simulate.py
+quant_test_period.py
+quant_v6_state.json
+
+# Certificates
+*.pem
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local
+local.properties
+
+# Separate projects
+quant/
+quant_ui/
+
+# Dev tools / non-core
+.claude_tasks/
+.openclaw/
+.github/
+pc_simulator/
+deploy/
+edge_device/
+docs/
+hardware/
+prompts/
+tests/
+ai_vision/
+
+# Workspace noise
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+ANDROID_AUDIT.md
+BACKEND_HEALTH.md
+IMPROVEMENT_PLAN_2026-05-28.md
+SMART_FITNESS_TASKS.md
+design_doc_content.txt
+mosquitto*.conf
+
+# Internal
+TEAM_REPORT.md
+
+# Logs
+*.log
+
+# Linux start scripts
+start.sh
+stop.sh
