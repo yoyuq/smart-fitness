@@ -23,6 +23,43 @@ from main import app  # 复用主 FastAPI 实例
 
 log = logging.getLogger("v2_routes")
 
+# ============================================================
+# Rep-counting state machines per device_id
+# ============================================================
+try:
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ai_vision"))
+    from exercise_detector import ExerciseDetector, ExerciseType
+    _detectors: Dict[str, ExerciseDetector] = {}
+    log.info("exercise_detector available for rep counting")
+except Exception as _e:
+    log.warning(f"exercise_detector not available: {_e}")
+    ExerciseDetector = None  # type: ignore
+    _detectors = {}
+
+
+def _get_detector(device_id: str, target_exercise: Optional[str] = None) -> Optional[Any]:
+    """Return (and optionally configure) the ExerciseDetector for a device.
+    Only resets rep_count when the target exercise *changes*, not on every call."""
+    if ExerciseDetector is None:
+        return None
+    det = _detectors.get(device_id)
+    if det is None:
+        det = ExerciseDetector()
+        _detectors[device_id] = det
+    if target_exercise:
+        try:
+            current_target = det.get_target_exercise()
+            new_target = ExerciseType(target_exercise)
+            if current_target != new_target:
+                # Target changed — reset is correct here (new exercise)
+                det.set_target_exercise(new_target)
+                log.info(f"detector {device_id} target changed {current_target} -> {target_exercise}, reps reset")
+        except ValueError:
+            pass  # unknown exercise string, ignore
+    return det
+
+
 # 可选: pose engine (ML 推理), 没装也不阻断启动
 try:
     import sys
@@ -215,6 +252,15 @@ async def v2_train_start(req: Request):
         "session_id": session_id,
         "started_at": time.time(),
     }
+    # Reset per-device rep counter when a workout starts.
+    try:
+        if device_id in _detectors:
+            _detectors[device_id].reset()
+        det = _get_detector(device_id, exercise)
+        if det is not None:
+            det.set_target_exercise(exercise)
+    except Exception as e:
+        log.warning(f"detector reset failed: {e}")
     log.info(f"training start device={device_id} user={user_id} exercise={exercise} sid={session_id}")
     return JSONResponse({"ok": True, "session_id": session_id, "exercise": exercise})
 
@@ -244,15 +290,19 @@ async def v2_vision_infer_full(req: Request):
     t0 = time.time()
     body = await req.json()
     device_id = (body.get("device_id") or "").strip()
+    source = (body.get("source") or body.get("device_type") or "esp32cam").strip()
     image_b64 = body.get("image_base64") or body.get("image") or ""
 
     # 训练态控制
     sess = active_trainings.get(device_id)
     paused = sess is None
-    next_interval_ms = 5000 if paused else 2500
-    exercise_hint = sess["exercise"] if sess else None
-    user_id = sess["user_id"] if sess else None
-    session_id = sess["session_id"] if sess else None
+    # APP preview also sends the selected exercise. Prefer active training state,
+    # but fall back to request body so reps can be counted before/without WS lag.
+    requested_exercise = (body.get("exercise") or body.get("exercise_type") or "").strip() or None
+    next_interval_ms = 5000 if paused else 500
+    exercise_hint = sess["exercise"] if sess else requested_exercise
+    user_id = sess["user_id"] if sess else (body.get("user_id") or None)
+    session_id = sess["session_id"] if sess else body.get("session_id")
 
     # 推理
     detected = False
@@ -260,6 +310,7 @@ async def v2_vision_infer_full(req: Request):
     confidence = 0.0
     form_score = None
     feedback = ""
+    rep_count = 0
     angles = {}
     landmarks_out = []
     img_for_broadcast = None
@@ -276,11 +327,40 @@ async def v2_vision_infer_full(req: Request):
                 detected = res.get("detected", False)
                 landmarks_out = res.get("landmarks") or []
                 if detected:
-                    exercise_pred = res.get("exercise")
+                    raw_pred = res.get("exercise")
+                    exercise_pred = exercise_hint or raw_pred
                     confidence = res.get("confidence", 0)
+                    angles = res.get("angles", {})
+                    # Score the selected target exercise when available, not whatever a single frame predicts.
                     form_score = res.get("form_score")
                     feedback = res.get("feedback", "")
-                    angles = res.get("angles", {})
+                    try:
+                        rule = getattr(eng, "__class__", None)  # keep lint quiet; FORM_RULES is module-level in pose_engine
+                        import pose_engine as _pe
+                        score_rule = _pe.FORM_RULES.get(exercise_pred or raw_pred)
+                        if score_rule and angles:
+                            _score, _fb = score_rule(angles)
+                            form_score = int(_score)
+                            feedback = _fb
+                    except Exception:
+                        pass
+                    # Rep counting: target exercise is fixed by the user's Spinner selection.
+                    det = _get_detector(device_id or "default", exercise_pred)
+                    if det is not None and angles:
+                        det_angles = {
+                            "left_knee": angles.get("knee_L"), "right_knee": angles.get("knee_R"),
+                            "left_hip": angles.get("hip_L"), "right_hip": angles.get("hip_R"),
+                            "left_elbow": angles.get("elbow_L"), "right_elbow": angles.get("elbow_R"),
+                            "left_shoulder": angles.get("shoulder_L"), "right_shoulder": angles.get("shoulder_R"),
+                            "torso_tilt": angles.get("torso_tilt"),
+                        }
+                        method = getattr(det, f"count_{exercise_pred}", None)
+                        if callable(method):
+                            rep_count = int(method(det_angles))
+                        else:
+                            rep_count = int(getattr(det, "rep_count", 0))
+                        log_angles = {k: round(v, 1) for k, v in det_angles.items() if v is not None}
+                        log.info(f"[REP] device={device_id} target={exercise_pred} angles={log_angles} reps={rep_count} stage={det.stage}")
                     # 写库
                     if session_id and user_id:
                         try:
@@ -312,11 +392,15 @@ async def v2_vision_infer_full(req: Request):
                     "session_id": session_id,
                     "exercise": exercise_pred if not paused else None,
                     "confidence": round(confidence, 2) if not paused else None,
-                    "form_score": form_score if not paused else None,
-                    "feedback": feedback if not paused else "",
+                    "form_score": form_score,
+                    "rep_count": rep_count,
+                    "feedback": feedback,
                     "detected": detected,
                     "landmarks": landmarks_out,
                     "paused": paused,
+                    "source": source,
+                    "device_type": source,
+                    "device_id": device_id,
                     "ts": time.time(),
                 }
                 asyncio.create_task(_ws_broadcast_user(str(broadcast_uid), payload))
@@ -329,11 +413,15 @@ async def v2_vision_infer_full(req: Request):
         "exercise": exercise_pred,
         "confidence": round(confidence, 3),
         "form_score": form_score,
+        "rep_count": rep_count,
         "feedback": feedback,
         "angles": angles,
         "paused": paused,
         "exercise_hint": exercise_hint,
         "next_interval_ms": next_interval_ms,
+        "source": source,
+        "device_type": source,
+        "device_id": device_id,
         "infer_ms": int((time.time() - t0) * 1000),
         "inference_ms": int((time.time() - t0) * 1000),
     })

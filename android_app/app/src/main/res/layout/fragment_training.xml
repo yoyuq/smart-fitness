@@ -11,12 +11,20 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <androidx.camera.view.PreviewView
+            android:id="@+id/phone_preview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            android:background="#000000"
+            app:implementationMode="compatible" />
+
         <ImageView
             android:id="@+id/esp32_preview"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
-            android:contentDescription="ESP32 live preview"
+            android:contentDescription="Camera live preview"
             android:background="#000000" />
 
         <!-- 等待画面占位文字 -->
@@ -189,10 +197,19 @@
             android:gravity="center_vertical">
 
             <Spinner
+                android:id="@+id/spinner_camera_source"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="0.9"
+                android:layout_marginEnd="8dp"
+                android:background="#33FFFFFF"
+                android:popupBackground="#FF2A2A2E" />
+
+            <Spinner
                 android:id="@+id/spinner_exercise"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
-                android:layout_weight="1"
+                android:layout_weight="1.1"
                 android:layout_marginEnd="8dp"
                 android:background="#33FFFFFF"
                 android:popupBackground="#FF2A2A2E" />

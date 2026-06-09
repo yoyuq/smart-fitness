@@ -1,10 +1,13 @@
 package com.smartfitness.app.ui.training
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.os.Bundle
+import android.util.Base64
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -18,7 +21,9 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.camera.view.PreviewView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -28,6 +33,7 @@ import com.smartfitness.app.R
 import com.smartfitness.app.api.ApiClient
 import com.smartfitness.app.api.WebSocketManager
 import com.smartfitness.app.camera.MjpegClient
+import com.smartfitness.app.camera.CameraCapture
 import com.smartfitness.app.model.CoachUpdate
 import com.smartfitness.app.model.TrainingStartRequest
 import com.smartfitness.app.model.TrainingStopRequest
@@ -35,11 +41,13 @@ import com.smartfitness.app.model.WorkoutSummaryRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 
 class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnInitListener {
 
     private var esp32Preview: ImageView? = null
+    private var phonePreview: PreviewView? = null
     private var esp32Status: TextView? = null
     private var statusDot: View? = null
     private var statusText: TextView? = null
@@ -50,6 +58,7 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
     private var coachTipCard: MaterialCardView? = null
     private var coachTipText: TextView? = null
     private var spinnerExercise: Spinner? = null
+    private var spinnerCameraSource: Spinner? = null
     private var btnToggle: MaterialButton? = null
     private var fabSettings: FloatingActionButton? = null
 
@@ -63,7 +72,15 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         "jumping_jack" to "Jumping Jack"
     )
 
+    private enum class CameraSource(val key: String, val label: String) {
+        ESP32("esp32cam", "ESP32-CAM"),
+        PHONE("phone", "Phone Camera"),
+        PC("pc", "PC Camera")
+    }
+    private val cameraSources = CameraSource.values().toList()
+    private var currentCameraSource: CameraSource = CameraSource.ESP32
     private var mjpegClient: MjpegClient? = null
+    private var phoneCameraCapture: CameraCapture? = null
     private var ws: WebSocketManager? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -73,6 +90,13 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
     @Volatile private var latestLandmarks: List<Map<String, Any?>>? = null
     @Volatile private var latestDetected: Boolean = false
     @Volatile private var renderBusy = false
+    @Volatile private var mjpegFrameCount: Long = 0
+    @Volatile private var wsUpdateCount: Long = 0
+    @Volatile private var previewInferBusy = false
+    @Volatile private var previewInferCount: Long = 0
+    @Volatile private var lastPreviewInferAt: Long = 0L
+    private val previewInferEveryMs: Long = 500L
+    private var currentStreamUrl: String = ""
 
     private var isTraining = false
     private var trainingStartMs = 0L
@@ -86,6 +110,7 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
     private var maxReps = 0
     private var lastSpokenTip: String? = null
     private var lastSpokenAt = 0L
+    private val cameraPermissionRequestCode = 4201
 
     private val handler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
@@ -109,6 +134,7 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         esp32Preview = view.findViewById(R.id.esp32_preview)
+        phonePreview = view.findViewById(R.id.phone_preview)
         esp32Status = view.findViewById(R.id.esp32_status)
         statusDot = view.findViewById(R.id.status_dot)
         statusText = view.findViewById(R.id.status_text)
@@ -119,9 +145,22 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         coachTipCard = view.findViewById(R.id.coach_tip_card)
         coachTipText = view.findViewById(R.id.coach_tip_text)
         spinnerExercise = view.findViewById(R.id.spinner_exercise)
+        spinnerCameraSource = view.findViewById(R.id.spinner_camera_source)
         btnToggle = view.findViewById(R.id.btn_training_toggle)
         fabSettings = view.findViewById(R.id.fab_settings)
 
+        spinnerCameraSource?.adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            cameraSources.map { it.label }
+        )
+        spinnerCameraSource?.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val next = cameraSources.getOrNull(position) ?: CameraSource.ESP32
+                if (next != currentCameraSource) switchCameraSource(next)
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
         spinnerExercise?.adapter = ArrayAdapter(
             requireContext(),
             android.R.layout.simple_spinner_dropdown_item,
@@ -132,37 +171,60 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         }
         fabSettings?.setOnClickListener { openSettings() }
 
-        statusText?.text = "Connecting MJPEG..."
+        statusText?.text = "Connecting camera..."
         tts = TextToSpeech(requireContext(), this)
 
-        startMjpegStream()
+        switchCameraSource(currentCameraSource)
     }
 
     private fun openSettings() {
-        val devId = ApiClient.getOrCreateDeviceId()
+        val phoneDevId = ApiClient.getOrCreateDeviceId()
         val prefs = requireContext().getSharedPreferences("sf_prefs", android.content.Context.MODE_PRIVATE)
         val currentIp = prefs.getString("esp32_ip", "192.168.72.20") ?: "192.168.72.20"
-        val input = android.widget.EditText(requireContext())
-        input.setText(currentIp)
-        input.hint = "ESP32 IP (e.g. 192.168.72.20)"
+        val currentEspDev = prefs.getString("esp32_device_id", "esp32cam-001") ?: "esp32cam-001"
+        val currentPcDev = prefs.getString("pc_device_id", "pc-camera-001") ?: "pc-camera-001"
+        val box = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(32, 0, 32, 0)
+        }
+        val ipInput = android.widget.EditText(requireContext()).apply {
+            setText(currentIp)
+            hint = "ESP32 IP (e.g. 192.168.72.20)"
+        }
+        val devInput = android.widget.EditText(requireContext()).apply {
+            setText(currentEspDev)
+            hint = "ESP32 device_id (e.g. esp32cam-001)"
+        }
+        val pcDevInput = android.widget.EditText(requireContext()).apply {
+            setText(currentPcDev)
+            hint = "PC camera device_id (e.g. pc-camera-001)"
+        }
+        box.addView(ipInput)
+        box.addView(devInput)
+        box.addView(pcDevInput)
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Settings")
             .setMessage(
-                "Device ID: $devId\n" +
+                "Phone Device ID: $phoneDevId\n" +
                 "Backend: " + ApiClient.BASE_URL + "\n" +
                 "WS status: " + (statusText?.text ?: "-") + "\n\n" +
-                "ESP32 stream IP:"
+                "Camera sources: ESP32 / Phone / PC\n" +
+                "Phone Camera ID: ${getPhoneCameraDeviceId()}\n\n" +
+                "ESP32 stream IP + ESP32 device_id + PC device_id:"
             )
-            .setView(input)
+            .setView(box)
             .setPositiveButton("Save & Reconnect") { _, _ ->
-                val newIp = input.text.toString().trim()
-                if (newIp.isNotEmpty() && newIp != currentIp) {
-                    prefs.edit().putString("esp32_ip", newIp).apply()
-                    Toast.makeText(requireContext(), "ESP32 IP updated, reconnecting...", Toast.LENGTH_SHORT).show()
-                    try { mjpegClient?.stop() } catch (_: Exception) {}
-                    mjpegClient = null
-                    startMjpegStream()
-                }
+                val newIp = ipInput.text.toString().trim().ifEmpty { "192.168.72.20" }
+                val newDev = devInput.text.toString().trim().ifEmpty { "esp32cam-001" }
+                val newPcDev = pcDevInput.text.toString().trim().ifEmpty { "pc-camera-001" }
+                prefs.edit()
+                    .putString("esp32_ip", newIp)
+                    .putString("esp32_device_id", newDev)
+                    .putString("pc_device_id", newPcDev)
+                    .apply()
+                Toast.makeText(requireContext(), "Camera settings saved", Toast.LENGTH_SHORT).show()
+                mjpegFrameCount = 0
+                switchCameraSource(currentCameraSource)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -172,14 +234,21 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         val pos = spinnerExercise?.selectedItemPosition ?: 0
         val exKey = exerciseOptions.getOrNull(pos)?.first ?: "squat"
         val exLabel = exerciseOptions.getOrNull(pos)?.second ?: exKey
-        val devId = ApiClient.getOrCreateDeviceId()
+        // Training control must use the currently selected camera device_id.
+        // start/stop and infer/full have to use the same id, otherwise reps/session mismatch.
+        val devId = getCurrentCameraDeviceId()
 
         btnToggle?.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
                     ApiClient.service.trainingStart(
-                        TrainingStartRequest(deviceId = devId, exercise = exKey)
+                        TrainingStartRequest(
+                            deviceId = devId,
+                            exercise = exKey,
+                            userId = ApiClient.userId.takeIf { it > 0L },
+                            source = currentCameraSource.key
+                        )
                     )
                 }
                 if (resp.ok) {
@@ -240,6 +309,186 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
                 Toast.makeText(requireContext(), "Stop failed: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 btnToggle?.isEnabled = true
+            }
+        }
+    }
+
+    private fun getEsp32DeviceId(): String {
+        val prefs = requireContext().getSharedPreferences("sf_prefs", android.content.Context.MODE_PRIVATE)
+        return prefs.getString("esp32_device_id", "esp32cam-001") ?: "esp32cam-001"
+    }
+
+    private fun getPhoneCameraDeviceId(): String = "phone-" + ApiClient.getOrCreateDeviceId()
+
+    private fun getPcCameraDeviceId(): String {
+        val prefs = requireContext().getSharedPreferences("sf_prefs", android.content.Context.MODE_PRIVATE)
+        return prefs.getString("pc_device_id", "pc-camera-001") ?: "pc-camera-001"
+    }
+
+    private fun getCurrentCameraDeviceId(): String = when (currentCameraSource) {
+        CameraSource.ESP32 -> getEsp32DeviceId()
+        CameraSource.PHONE -> getPhoneCameraDeviceId()
+        CameraSource.PC -> getPcCameraDeviceId()
+    }
+
+    private fun switchCameraSource(source: CameraSource) {
+        if (isTraining) {
+            Toast.makeText(requireContext(), "Stop training before switching camera", Toast.LENGTH_SHORT).show()
+            spinnerCameraSource?.setSelection(cameraSources.indexOf(currentCameraSource).coerceAtLeast(0))
+            return
+        }
+        stopCameraSources()
+        currentCameraSource = source
+        resetCountersForSource()
+        latestFrame = null
+        latestLandmarks = null
+        latestDetected = false
+        esp32Preview?.setImageBitmap(null)
+        when (source) {
+            CameraSource.ESP32 -> {
+                phonePreview?.visibility = View.GONE
+                esp32Preview?.visibility = View.VISIBLE
+                statusText?.text = "ESP32-CAM"
+                startMjpegStream()
+            }
+            CameraSource.PHONE -> {
+                esp32Preview?.visibility = View.GONE
+                phonePreview?.visibility = View.VISIBLE
+                statusText?.text = "Phone Camera"
+                startPhoneCamera()
+            }
+            CameraSource.PC -> {
+                phonePreview?.visibility = View.GONE
+                esp32Preview?.visibility = View.VISIBLE
+                esp32Status?.visibility = View.VISIBLE
+                esp32Status?.text = "PC camera mode\nStart pc_simulator/pc_camera_agent.py on this PC"
+                statusText?.text = "PC Camera: waiting for updates"
+                autoConnectCoachIfNeeded()
+            }
+        }
+    }
+
+    private fun resetCountersForSource() {
+        lastReps = 0
+        maxReps = 0
+        lastScore = null
+        scoreSum = 0.0
+        scoreCount = 0
+        hudReps?.text = "0"
+        hudScore?.text = "--"
+        previewInferBusy = false
+        previewInferCount = 0
+        lastPreviewInferAt = 0L
+    }
+
+    private fun stopCameraSources() {
+        try { mjpegClient?.stop() } catch (_: Exception) {}
+        mjpegClient = null
+        try { phoneCameraCapture?.stop() } catch (_: Exception) {}
+        phoneCameraCapture = null
+    }
+
+    private fun startPhoneCamera() {
+        val preview = phonePreview ?: return
+        if (phoneCameraCapture != null) return
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            esp32Status?.visibility = View.VISIBLE
+            esp32Status?.text = "Camera permission needed"
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), cameraPermissionRequestCode)
+            return
+        }
+        esp32Status?.visibility = View.VISIBLE
+        esp32Status?.text = "Starting phone camera..."
+        val cap = CameraCapture(requireContext(), viewLifecycleOwner, preview)
+        phoneCameraCapture = cap
+        cap.start(
+            intervalMs = 500L,
+            maxWidth = 640,
+            jpegQuality = 58,
+            onFrame = { jpegB64 -> requestPhonePose(jpegB64) },
+            onError = { t ->
+                activity?.runOnUiThread {
+                    esp32Status?.visibility = View.VISIBLE
+                    esp32Status?.text = "Phone camera issue: ${t.message?.take(80)}"
+                }
+            }
+        )
+        esp32Status?.visibility = View.GONE
+    }
+
+    private fun requestPhonePose(jpegB64: String) {
+        if (previewInferBusy) return
+        previewInferBusy = true
+        val deviceId = getPhoneCameraDeviceId()
+        val uid = ApiClient.userId.takeIf { it > 0L }
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val resp = ApiClient.service.visionInferFull(
+                    com.smartfitness.app.model.VisionInferRequest(
+                        image = jpegB64,
+                        deviceId = deviceId,
+                        userId = uid,
+                        backend = "mediapipe",
+                        exercise = trainingExerciseKey ?: exerciseOptions.getOrNull(spinnerExercise?.selectedItemPosition ?: 0)?.first ?: "squat",
+                        source = CameraSource.PHONE.key
+                    )
+                )
+                latestLandmarks = resp.landmarks.mapIndexed { idx, lm ->
+                    mapOf<String, Any?>(
+                        "id" to (lm.id ?: idx), "name" to lm.name,
+                        "x" to lm.x, "y" to lm.y, "z" to lm.z,
+                        "visibility" to lm.visibility,
+                        "pixel_x" to lm.pixelX, "pixel_y" to lm.pixelY
+                    )
+                }
+                latestDetected = resp.detected ?: latestLandmarks?.isNotEmpty() == true
+                previewInferCount += 1
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    val incomingReps = resp.repCount
+                    val reps = if (latestDetected && incomingReps != null) maxOf(lastReps, incomingReps) else lastReps
+                    val score = if (latestDetected) resp.formScore else null
+                    lastReps = reps
+                    if (reps > maxReps) maxReps = reps
+                    if (latestDetected && score != null) {
+                        lastScore = score
+                        scoreSum += score
+                        scoreCount += 1
+                    }
+                    hudReps?.text = reps.toString()
+                    hudScore?.text = score?.let { String.format("%.0f", it) } ?: "--"
+                    if (latestDetected) {
+                        val tip = resp.coachTip ?: resp.formFeedback.firstOrNull()?.messageCn ?: resp.formFeedback.firstOrNull()?.messageEn
+                        if (!tip.isNullOrBlank()) {
+                            coachTipText?.text = tip
+                            coachTipCard?.visibility = View.VISIBLE
+                        }
+                    } else {
+                        coachTipText?.text = "未检测到人体，请站到画面中央"
+                        coachTipCard?.visibility = View.VISIBLE
+                    }
+                    if (!isTraining) statusText?.text = if (latestDetected) "Phone pose detected" else "Phone: no person"
+                }
+            } catch (e: Exception) {
+                activity?.runOnUiThread {
+                    if (!isTraining) statusText?.text = "Phone infer error: ${e.message?.take(40)}"
+                }
+            } finally {
+                previewInferBusy = false
+            }
+        }
+    }
+
+    private fun updateDebugOverlay(width: Int?, height: Int?, error: String?) {
+        activity?.runOnUiThread {
+            if (!isAdded) return@runOnUiThread
+            if (error != null) {
+                esp32Status?.visibility = View.VISIBLE
+                esp32Status?.text = "Camera connection issue\n" + currentStreamUrl
+            } else {
+                // Demo UI: hide verbose diagnostics such as MJPEG frames / Preview infer / WS / landmarks / detected / device_id.
+                esp32Status?.visibility = View.GONE
+                esp32Status?.text = ""
             }
         }
     }
@@ -305,24 +554,116 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         val prefs = requireContext().getSharedPreferences("sf_prefs", android.content.Context.MODE_PRIVATE)
         val ip = prefs.getString("esp32_ip", "192.168.72.20") ?: "192.168.72.20"
         val url = "http://$ip:81/stream"
+        currentStreamUrl = url
+        activity?.runOnUiThread {
+            esp32Status?.visibility = View.VISIBLE
+            esp32Status?.text = "Connecting camera..."
+        }
         val mc = MjpegClient(
             url = url,
             scope = viewLifecycleOwner.lifecycleScope,
             onFrame = { bmp ->
                 latestFrame = bmp
+                mjpegFrameCount += 1
+                requestPreviewPoseIfNeeded(bmp)
                 paintLatest()
-                activity?.runOnUiThread {
-                    if (esp32Status?.visibility == View.VISIBLE) esp32Status?.visibility = View.GONE
-                }
+                updateDebugOverlay(bmp.width, bmp.height, null)
             },
             onError = { t ->
-                activity?.runOnUiThread {
-                    if (isAdded) esp32Status?.text = "MJPEG error: ${t.message}"
-                }
+                updateDebugOverlay(null, null, "MJPEG error: ${t.message}")
             }
         )
         mjpegClient = mc
         mc.start()
+    }
+
+    private fun requestPreviewPoseIfNeeded(frame: Bitmap) {
+        val now = System.currentTimeMillis()
+        if (previewInferBusy) return
+        if (now - lastPreviewInferAt < previewInferEveryMs) return
+        lastPreviewInferAt = now
+        previewInferBusy = true
+        val deviceId = getCurrentCameraDeviceId()
+        val uid = ApiClient.userId.takeIf { it > 0L }
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val jpegB64 = bitmapToBase64Jpeg(frame, quality = 52)
+                val resp = ApiClient.service.visionInferFull(
+                    com.smartfitness.app.model.VisionInferRequest(
+                        image = jpegB64,
+                        deviceId = deviceId,
+                        userId = uid,
+                        backend = "mediapipe",
+                        exercise = trainingExerciseKey ?: exerciseOptions.getOrNull(spinnerExercise?.selectedItemPosition ?: 0)?.first ?: "squat",
+                        source = currentCameraSource.key
+                    )
+                )
+                val maps = resp.landmarks.mapIndexed { idx, lm ->
+                    mapOf<String, Any?>(
+                        "id" to (lm.id ?: idx),
+                        "name" to lm.name,
+                        "x" to lm.x,
+                        "y" to lm.y,
+                        "z" to lm.z,
+                        "visibility" to lm.visibility,
+                        "pixel_x" to lm.pixelX,
+                        "pixel_y" to lm.pixelY
+                    )
+                }
+                latestLandmarks = maps
+                latestDetected = resp.detected ?: maps.isNotEmpty()
+                previewInferCount += 1
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    val incomingReps = resp.repCount
+                    val reps = if (latestDetected && incomingReps != null) maxOf(lastReps, incomingReps) else lastReps
+                    val score = if (latestDetected) resp.formScore else null
+                    lastReps = reps
+                    if (reps > maxReps) maxReps = reps
+                    if (latestDetected && score != null) {
+                        lastScore = score
+                        scoreSum += score
+                        scoreCount += 1
+                    }
+                    hudReps?.text = reps.toString()
+                    hudScore?.text = score?.let { String.format("%.0f", it) } ?: "--"
+                    if (latestDetected) {
+                        val tip = resp.coachTip ?: resp.formFeedback.firstOrNull()?.messageCn ?: resp.formFeedback.firstOrNull()?.messageEn
+                        if (!tip.isNullOrBlank()) {
+                            coachTipText?.text = tip
+                            coachTipCard?.visibility = View.VISIBLE
+                        }
+                    } else {
+                        coachTipText?.text = "未检测到人体，请站到画面中央"
+                        coachTipCard?.visibility = View.VISIBLE
+                    }
+                    if (!isTraining) {
+                        val status = if (latestDetected) "Pose detected" else "No person detected"
+                        statusText?.text = status
+                    }
+                    updateDebugOverlay(frame.width, frame.height, null)
+                    paintLatest()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    if (!isTraining) statusText?.text = "Preview infer error: ${e.message?.take(40)}"
+                }
+            } finally {
+                previewInferBusy = false
+            }
+        }
+    }
+
+    private fun bitmapToBase64Jpeg(bitmap: Bitmap, quality: Int): String {
+        val out = ByteArrayOutputStream()
+        val src = if (bitmap.width > 640) {
+            val newW = 640
+            val newH = (bitmap.height * (newW.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+        } else bitmap
+        src.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
     private fun paintLatest() {
@@ -383,6 +724,19 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         }
     }
 
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == cameraPermissionRequestCode) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (currentCameraSource == CameraSource.PHONE) startPhoneCamera()
+            } else {
+                Toast.makeText(requireContext(), "Camera permission denied", Toast.LENGTH_LONG).show()
+                spinnerCameraSource?.setSelection(cameraSources.indexOf(CameraSource.ESP32))
+            }
+        }
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts?.language = Locale.SIMPLIFIED_CHINESE
@@ -401,41 +755,39 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         try {
             val upd = gson.fromJson(text, CoachUpdate::class.java)
             if (upd?.type == "coach_update") {
-                val reps = upd.repCount ?: 0
+                val incomingReps = upd.repCount
                 val score = upd.formScore
-                lastReps = reps
-                if (reps > maxReps) maxReps = reps
-                if (score != null) {
-                    lastScore = score
-                    scoreSum += score; scoreCount += 1
-                }
                 latestLandmarks = upd.landmarks
                 latestDetected = upd.detected ?: false
-                // Auto-classifier: if backend predicts a different exercise with high confidence, sync UI
-                val predicted = upd.exercise ?: upd.exerciseType
-                if (!predicted.isNullOrBlank() && predicted != trainingExerciseKey) {
-                    val newIdx = exerciseOptions.indexOfFirst { it.first == predicted }
-                    if (newIdx >= 0) {
-                        activity?.runOnUiThread {
-                            spinnerExercise?.setSelection(newIdx)
-                            coachTipText?.text = "Detected: " + exerciseOptions[newIdx].second
-                            coachTipCard?.visibility = View.VISIBLE
-                        }
-                        trainingExerciseKey = predicted
-                    }
-                }
+                wsUpdateCount += 1
+                updateDebugOverlay(latestFrame?.width, latestFrame?.height, null)
+                // Keep the user-selected exercise fixed. Do not auto-switch the Spinner
+                // based on single-frame classifier output; this page is for the selected workout.
                 activity?.runOnUiThread {
-                    hudReps?.text = reps.toString()
-                    hudScore?.text = score?.let { String.format("%.0f", it) } ?: "--"
-                    val tip = upd.coachTip ?: upd.feedback
-                    if (!tip.isNullOrBlank()) {
-                        coachTipText?.text = tip
-                        coachTipCard?.visibility = View.VISIBLE
-                        val now = System.currentTimeMillis()
-                        if (ttsReady && (tip != lastSpokenTip || now - lastSpokenAt > 8000)) {
-                            tts?.speak(tip, TextToSpeech.QUEUE_FLUSH, null, "coach")
-                            lastSpokenTip = tip; lastSpokenAt = now
+                    val displayReps = if (latestDetected && incomingReps != null) maxOf(lastReps, incomingReps) else lastReps
+                    lastReps = displayReps
+                    if (displayReps > maxReps) maxReps = displayReps
+                    hudReps?.text = displayReps.toString()
+                    if (latestDetected) {
+                        if (score != null) {
+                            lastScore = score
+                            scoreSum += score; scoreCount += 1
                         }
+                        hudScore?.text = score?.let { String.format("%.0f", it) } ?: "--"
+                        val tip = upd.coachTip ?: upd.feedback
+                        if (!tip.isNullOrBlank()) {
+                            coachTipText?.text = tip
+                            coachTipCard?.visibility = View.VISIBLE
+                            val now = System.currentTimeMillis()
+                            if (ttsReady && (tip != lastSpokenTip || now - lastSpokenAt > 8000)) {
+                                tts?.speak(tip, TextToSpeech.QUEUE_FLUSH, null, "coach")
+                                lastSpokenTip = tip; lastSpokenAt = now
+                            }
+                        }
+                    } else {
+                        hudScore?.text = "--"
+                        coachTipText?.text = "未检测到人体，请站到画面中央"
+                        coachTipCard?.visibility = View.VISIBLE
                     }
                 }
                 paintLatest()
@@ -470,14 +822,14 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         super.onDestroyView()
         handler.removeCallbacks(timerRunnable)
         ws?.close(); ws = null
-        try { mjpegClient?.stop() } catch (_: Exception) {}
-        mjpegClient = null
+        stopCameraSources()
         tts?.stop(); tts?.shutdown(); tts = null
         latestFrame = null; latestLandmarks = null
-        esp32Preview = null; esp32Status = null
+        previewInferBusy = false
+        esp32Preview = null; phonePreview = null; esp32Status = null
         statusDot = null; statusText = null; timerText = null
         hudLayout = null; hudReps = null; hudScore = null
         coachTipCard = null; coachTipText = null
-        spinnerExercise = null; btnToggle = null; fabSettings = null
+        spinnerExercise = null; spinnerCameraSource = null; btnToggle = null; fabSettings = null
     }
 }

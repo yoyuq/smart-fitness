@@ -280,7 +280,9 @@ data class VisionInferRequest(
     @SerializedName("device_id") val deviceId: String? = null,
     @SerializedName("session_id") val sessionId: String? = null,
     @SerializedName("user_id") val userId: Long? = null,
-    val backend: String? = null                         // "mediapipe" | "yolo"
+    val backend: String? = null,                        // "mediapipe" | "yolo"
+    @SerializedName("exercise") val exercise: String? = null,  // target exercise from spinner
+    @SerializedName("source") val source: String? = null       // esp32cam | phone | pc
 )
 
 data class VisionLandmark(
@@ -333,6 +335,7 @@ data class VisionInferFullResponse(
     @SerializedName("plan_match") val planMatch: PlanMatch? = null,
     @SerializedName("body_context") val bodyContext: BodyContext? = null,
     val summary: InferSummary? = null,
+    val feedback: String? = null,
     val error: String? = null
 )
 
@@ -341,6 +344,8 @@ data class VisionInferFullResponse(
 data class TrainingStartRequest(
     @SerializedName("device_id") val deviceId: String,
     val exercise: String,
+    @SerializedName("user_id") val userId: Long? = null,
+    val source: String? = null,
     @SerializedName("session_id") val sessionId: String? = null
 )
 

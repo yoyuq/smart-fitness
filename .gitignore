@@ -28,16 +28,23 @@ _*.ps1
 _*.json
 _*.txt
 _*.b64
+_inject_prefs_tmp/
+android_app/_*.xml
 ut*.xml
 u*.xml
 uc*.xml
 ui*.xml
 ui[0-9].xml
+phone_window.xml
+emulator_window*.xml
+emulator_screen.png
 _sc*.png
 _training*.png
 s2.png
 screen1.png
 screenshot.png
+debug_*.jpg
+*.docx
 build_*.log
 backend_run.log
 _stick.*
@@ -103,6 +110,8 @@ TEAM_REPORT.md
 
 # Logs
 *.log
+*.db-shm
+*.db-wal
 
 # Linux start scripts
 start.sh
