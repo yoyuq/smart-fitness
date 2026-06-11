@@ -32,6 +32,16 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
+# Qwen (阿里云百炼, OpenAI 兼容). 2026-06 评测: qwen3.7-max 计划生成质量/稳定性最佳
+QWEN_API_KEY = os.environ.get("BAILIAN_API_KEY", "") or os.environ.get("DASHSCOPE_API_KEY", "")
+QWEN_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+QWEN_MODEL = os.environ.get("QWEN_MODEL", "qwen3.7-max")
+
+# 腾讯混元 (OpenAI 兼容). hunyuan-lite 免费+1.3s, 适合短点评兜底; 勿用于 JSON 计划
+HUNYUAN_API_KEY = os.environ.get("HUNYUAN_API_KEY", "")
+HUNYUAN_URL = "https://api.hunyuan.cloud.tencent.com/v1/chat/completions"
+HUNYUAN_MODEL = os.environ.get("HUNYUAN_MODEL", "hunyuan-lite")
+
 # 默认优先: volc -> deepseek
 PROVIDER_PRIORITY = os.environ.get("AI_PROVIDER_PRIORITY", "volc,deepseek").split(",")
 
@@ -152,34 +162,97 @@ def _call_deepseek(messages, max_tokens, temperature) -> Optional[str]:
         return None
 
 
+def _call_openai_compat(url, key, model, messages, max_tokens, temperature) -> Optional[str]:
+    """通用 OpenAI 兼容协议调用 (qwen/hunyuan 等)."""
+    if not (key and requests):
+        return None
+    try:
+        r = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": messages,
+                  "temperature": temperature, "max_tokens": max_tokens},
+            timeout=TIMEOUT,
+        )
+        if r.status_code != 200:
+            log.warning(f"{model} HTTP {r.status_code}: {r.text[:200]}")
+            return None
+        return (r.json().get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+    except Exception as e:
+        log.warning(f"{model} call failed: {e}")
+        return None
+
+
+_DISPATCH = {
+    "volc": lambda m, mt, t: _call_volc(m, mt, t),
+    "volc-coding": lambda m, mt, t: _call_volc_coding(m, mt, t),
+    "deepseek": lambda m, mt, t: _call_deepseek(m, mt, t),
+    "qwen": lambda m, mt, t: _call_openai_compat(QWEN_URL, QWEN_API_KEY, QWEN_MODEL, m, mt, t),
+    "hunyuan": lambda m, mt, t: _call_openai_compat(HUNYUAN_URL, HUNYUAN_API_KEY, HUNYUAN_MODEL, m, mt, t),
+}
+
+
 def _call_llm(messages: List[Dict], max_tokens: int = 600, temperature: float = 0.6,
-              prefer: Optional[str] = None) -> Optional[str]:
-    """按优先级调用 provider, 失败 fallback. prefer 指定的排第一, 其余仍兜底."""
-    order = list(PROVIDER_PRIORITY)
-    for p in ["volc-coding", "volc", "deepseek"]:
-        if p not in order:
-            order.append(p)
-    if prefer and prefer in order:
-        order.remove(prefer)
-        order.insert(0, prefer)
-    elif prefer:
-        order.insert(0, prefer)
+              prefer: Optional[str] = None, chain: Optional[str] = None) -> Optional[str]:
+    """按优先级调用 provider, 失败 fallback.
+
+    chain: 逗号分隔的精确调用链 (如 "deepseek,qwen"), 给定时只按它走;
+    prefer: 指定的排第一, 其余按全局优先级兜底.
+    """
+    if chain:
+        order = [c.strip() for c in chain.split(",") if c.strip()]
+    else:
+        order = list(PROVIDER_PRIORITY)
+        for p in ["volc-coding", "volc", "deepseek", "qwen", "hunyuan"]:
+            if p not in order:
+                order.append(p)
+        if prefer:
+            if prefer in order:
+                order.remove(prefer)
+            order.insert(0, prefer)
     for prov in order:
-        prov = (prov or "").strip()
-        if prov == "volc":
-            out = _call_volc(messages, max_tokens, temperature)
-            if out: return out
-        elif prov == "volc-coding":
-            out = _call_volc_coding(messages, max_tokens, temperature)
-            if out: return out
-        elif prov == "deepseek":
-            out = _call_deepseek(messages, max_tokens, temperature)
-            if out: return out
+        fn = _DISPATCH.get((prov or "").strip())
+        if fn is None:
+            continue
+        out = fn(messages, max_tokens, temperature)
+        if out:
+            return out
     return None
 
 
+def _ensure_coach_memory(conn: sqlite3.Connection):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            category TEXT DEFAULT 'general',
+            note TEXT NOT NULL,
+            created_at INTEGER
+        )""")
+    conn.commit()
+
+
+def add_coach_memory(conn: sqlite3.Connection, user_id: int, note: str, category: str = "general"):
+    _ensure_coach_memory(conn)
+    conn.execute("INSERT INTO coach_memory (user_id, category, note, created_at) VALUES (?,?,?,?)",
+                 (user_id, category, (note or "").strip()[:200], int(time.time())))
+    conn.commit()
+
+
+def get_coach_memories(conn: sqlite3.Connection, user_id: int, limit: int = 10) -> List[Dict]:
+    _ensure_coach_memory(conn)
+    rows = conn.execute(
+        "SELECT id, category, note, created_at FROM coach_memory WHERE user_id=? ORDER BY id DESC LIMIT ?",
+        (user_id, limit)).fetchall()
+    return [{"id": r[0], "category": r[1], "note": r[2], "created_at": r[3]} for r in rows]
+
+
 def _load_user_context(conn: sqlite3.Connection, user_id: int) -> Dict[str, Any]:
-    """汇总一个用户的上下文 (为 LLM prompt 服务)."""
+    """汇总一个用户的上下文 (为 LLM prompt 服务).
+
+    注意: 真实训练链路写的是 exercise_log / sessions 表;
+    旧版读 user_exercise_log / daily_summary (没人写) 导致 AI 一直看不到真实数据.
+    """
     cur = conn.cursor()
     ctx: Dict[str, Any] = {"user_id": user_id}
 
@@ -197,51 +270,79 @@ def _load_user_context(conn: sqlite3.Connection, user_id: int) -> Dict[str, Any]
         w, h, bf, ts = row
         ctx["body"] = {"weight_kg": w, "height_cm": h, "body_fat": bf, "ts": ts}
         if w and h:
-            bmi = round(w / ((h / 100) ** 2), 1)
-            ctx["body"]["bmi"] = bmi
+            ctx["body"]["bmi"] = round(w / ((h / 100) ** 2), 1)
 
-    # 今日运动记录 (24h)
-    since = int(time.time()) - 86400
+    # 今日运动记录 (本地零点起)
+    lt = time.localtime()
+    midnight = int(time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1)))
     rows = cur.execute(
-        """SELECT exercise_type, reps, sets, avg_form_score
-           FROM user_exercise_log
-           WHERE user_id = ? AND performed_at > ?""",
-        (user_id, since)
-    ).fetchall()
-    today_log = []
-    for r in rows:
-        today_log.append({
-            "exercise": r[0], "reps": r[1], "sets": r[2], "avg_form": r[3]
-        })
-    ctx["today_exercises"] = today_log
+        "SELECT exercise_type, reps, duration_s, avg_form_score FROM exercise_log "
+        "WHERE user_id = ? AND created_at >= ?", (user_id, midnight)).fetchall()
+    ctx["today_exercises"] = [
+        {"exercise": r[0], "reps": r[1], "sets": 1, "duration_s": r[2], "avg_form": r[3]}
+        for r in rows]
 
-    # 近 7 天汇总
+    # 近 14 天逐日汇总 (从 exercise_log 实时聚合)
+    since14 = int(time.time()) - 14 * 86400
     rows = cur.execute(
-        """SELECT date, total_reps, total_calories, avg_form_score
-           FROM daily_summary WHERE user_id = ?
-           ORDER BY date DESC LIMIT 7""",
-        (user_id,)
-    ).fetchall()
+        """SELECT date(created_at,'unixepoch','localtime') AS d,
+                  COUNT(*) AS sessions, SUM(reps) AS reps,
+                  SUM(duration_s) AS dur, AVG(avg_form_score) AS form
+           FROM exercise_log WHERE user_id=? AND created_at>=?
+           GROUP BY d ORDER BY d DESC""", (user_id, since14)).fetchall()
     ctx["weekly_summary"] = [
-        {"date": r[0], "reps": r[1], "kcal": r[2], "form": r[3]}
-        for r in rows
-    ]
+        {"date": r[0], "sessions": r[1], "reps": r[2] or 0,
+         "minutes": round((r[3] or 0) / 60.0, 1),
+         "form": round(r[4], 1) if r[4] is not None else None}
+        for r in rows]
+
+    # 连续训练天数 (streak)
+    days = [r["date"] for r in ctx["weekly_summary"]]
+    streak = 0
+    import datetime as _dt
+    cursor_day = _dt.date.today()
+    dayset = set(days)
+    while cursor_day.isoformat() in dayset:
+        streak += 1
+        cursor_day -= _dt.timedelta(days=1)
+    if streak == 0 and (_dt.date.today() - _dt.timedelta(days=1)).isoformat() in dayset:
+        # 今天还没练, 从昨天往前数
+        cursor_day = _dt.date.today() - _dt.timedelta(days=1)
+        while cursor_day.isoformat() in dayset:
+            streak += 1
+            cursor_day -= _dt.timedelta(days=1)
+    ctx["streak_days"] = streak
+
+    # 近 28 天分动作统计 (PB / 平均评分 → 强弱项)
+    since28 = int(time.time()) - 28 * 86400
+    rows = cur.execute(
+        """SELECT exercise_type, COUNT(*) AS n, SUM(reps) AS total_reps,
+                  MAX(reps) AS pb_reps, AVG(avg_form_score) AS avg_form
+           FROM exercise_log WHERE user_id=? AND created_at>=? AND exercise_type IS NOT NULL
+           GROUP BY exercise_type ORDER BY n DESC""", (user_id, since28)).fetchall()
+    ctx["per_exercise"] = [
+        {"exercise": r[0], "times": r[1], "total_reps": r[2] or 0, "pb_reps": r[3] or 0,
+         "avg_form": round(r[4], 1) if r[4] is not None else None}
+        for r in rows]
 
     # 当前训练计划
     rows = cur.execute(
-        """SELECT name, exercises, created_at
-           FROM workout_plans WHERE user_id = ?
-           ORDER BY created_at DESC LIMIT 5""",
-        (user_id,)
-    ).fetchall()
+        """SELECT name, exercises, created_at FROM workout_plans
+           WHERE user_id = ? ORDER BY created_at DESC LIMIT 3""", (user_id,)).fetchall()
     plans_list = []
     for r in rows:
         try:
             ex = json.loads(r[1]) if r[1] else []
         except Exception:
             ex = []
-        plans_list.append({"name": r[0], "exercises": ex[:3], "created_at": r[2]})
+        plans_list.append({"name": r[0], "exercises": ex[:8], "items": len(ex), "created_at": r[2]})
     ctx["plans"] = plans_list
+
+    # 教练长期记忆 (伤病/偏好/目标等)
+    try:
+        ctx["coach_memory"] = get_coach_memories(conn, user_id, limit=10)
+    except Exception:
+        ctx["coach_memory"] = []
     return ctx
 
 
@@ -263,28 +364,48 @@ def _build_user_context_block(ctx: Dict[str, Any]) -> str:
 
     today = ctx.get("today_exercises") or []
     today_line = "(今日还没有记录)" if not today else \
-        "; ".join([f"{e['exercise']} {e['reps']}个 x{e['sets']}组 评分{e['avg_form']:.0f}"
-                    if e['avg_form'] else f"{e['exercise']} {e['reps']}个 x{e['sets']}组"
-                    for e in today])
+        "; ".join([(f"{e['exercise']} {e['reps']}个 评分{e['avg_form']:.0f}"
+                    if e.get('avg_form') else f"{e['exercise']} {e['reps']}个")
+                   for e in today])
 
     week = ctx.get("weekly_summary") or []
-    week_lines = "\n".join([f"  {r['date']}: {r['reps']}个, {r['kcal']}千卡, 评分{r['form'] or 0:.0f}" for r in week]) or "  (近 7 天无记录)"
+    week_lines = "\n".join([
+        f"  {r['date']}: {r['sessions']}次训练, {r['reps']}个, {r['minutes']}分钟"
+        + (f", 评分{r['form']:.0f}" if r.get('form') is not None else "")
+        for r in week]) or "  (近 14 天无记录)"
+
+    per_ex = ctx.get("per_exercise") or []
+    per_ex_lines = "\n".join([
+        f"  {e['exercise']}: 练过{e['times']}次, 累计{e['total_reps']}个, 单次最佳{e['pb_reps']}个"
+        + (f", 平均评分{e['avg_form']:.0f}" if e.get('avg_form') is not None else "")
+        for e in per_ex]) or "  (近 28 天无分动作数据)"
 
     plans = ctx.get("plans") or []
-    plans_line = "; ".join([f"{p['name']}({len(p.get('exercises', []))}项)" for p in plans[:5]]) or "(无待办计划)"
+    plans_line = "; ".join([f"{p['name']}({p.get('items', len(p.get('exercises', [])))}项)"
+                            for p in plans[:3]]) or "(无待办计划)"
+
+    mem = ctx.get("coach_memory") or []
+    mem_lines = "\n".join([f"  [{m['category']}] {m['note']}" for m in mem]) or "  (暂无)"
 
     return f"""## 用户档案
 姓名: {name}
 身体: {body_line}
+连续训练: {ctx.get('streak_days', 0)} 天
 
 ## 今日训练
 {today_line}
 
-## 近 7 天汇总
+## 近 14 天逐日记录
 {week_lines}
+
+## 近 28 天分动作统计 (含个人最佳)
+{per_ex_lines}
 
 ## 当前计划
 {plans_line}
+
+## 教练档案记忆 (历史观察/伤病/偏好)
+{mem_lines}
 """
 
 
@@ -369,8 +490,8 @@ def generate_plan(conn, user_id, goal, weeks=4):
         [{"role": "system", "content": SYSTEM_PROMPT_BASE + " 严格按要求只输出 JSON 数组, 不要任何额外文字."},
          {"role": "user", "content": prompt}],
         max_tokens=MAX_TOKENS_PLAN, temperature=0.4,
-        # 长 JSON 生成对延迟敏感, 默认偏好 deepseek (可用 AI_PLAN_PROVIDER 覆盖)
-        prefer=os.environ.get("AI_PLAN_PROVIDER", "deepseek"),
+        # 2026-06 评测: deepseek-v4-flash 主力, qwen3.7-max 质量兜底 (勿用 hunyuan, JSON 纪律差)
+        chain=os.environ.get("AI_PLAN_CHAIN", "deepseek,qwen,volc-coding"),
     )
     if not raw:
         return {"ok": False, "error": "LLM 调用失败", "plans": []}
@@ -467,7 +588,9 @@ def workout_coach_remark(exercise: str, reps: int, duration_s: float, avg_form_s
         {"role": "user", "content": prompt},
     ]
     try:
-        text = _call_llm(messages, temperature=0.7, max_tokens=120, prefer="deepseek")
+        # max_tokens 给足: 推理模型的思考 token 计入上限, 120 会饿死正文
+        text = _call_llm(messages, temperature=0.7, max_tokens=800,
+                         chain=os.environ.get("AI_REMARK_CHAIN", "volc-coding,hunyuan,deepseek"))
         if text: return text.strip()
     except Exception as e:
         log.warning(f"workout_coach_remark LLM fail: {e}")
@@ -480,3 +603,60 @@ def workout_coach_remark(exercise: str, reps: int, duration_s: float, avg_form_s
         return f"{reps} 个完成, 但 form 评分只有 {avg_form_score:.0f}, 下次放慢节奏盯准动作要点."
     else:
         return f"完成了 {reps} 个 {exercise}, 用时 {int(duration_s)} 秒, 继续保持."
+
+
+def coach_review(conn, user_id) -> Dict[str, Any]:
+    """私人教练管家: 系统整合历史数据+当前计划, 输出结构化深度复盘.
+
+    低频高质量场景, 默认链 qwen3.7-max -> deepseek -> volc-coding (AI_REVIEW_CHAIN 可覆盖).
+    模型同时提炼 0-2 条长期观察自动写入 coach_memory, 供 chat/计划生成复用.
+    """
+    import re as _re
+    ctx = _load_user_context(conn, user_id)
+    ctx_block = _build_user_context_block(ctx)
+    prompt = f"""{ctx_block}
+
+你是该用户的专属私人教练. 基于以上全部数据做一次系统复盘, 输出**纯 JSON 对象**(不要 markdown):
+{{
+  "trend": "训练量与频率趋势分析, 给出具体数字对比",
+  "balance": "动作结构平衡评估(推/拉/腿/核心), 指出缺口",
+  "weakness": "评分最低或最少练的动作是什么, 怎么改",
+  "adherence": "对照当前计划的执行情况评价; 无计划则建议建立",
+  "next_week": ["下周可执行的调整建议, 每条含动作+组次数"],
+  "encouragement": "一句个性化激励, 用数据说话",
+  "memory_notes": ["0-2条值得教练长期记住的观察(伤病/瓶颈/习惯), 没有则空数组"]
+}}
+要求: 全部中文; 每字段不超过80字; next_week 2-4条; 数据不足的字段如实说明, 不要编造数字."""
+    raw = _call_llm(
+        [{"role": "system", "content": SYSTEM_PROMPT_BASE + " 严格只输出 JSON 对象, 不要任何额外文字."},
+         {"role": "user", "content": prompt}],
+        max_tokens=4000, temperature=0.4,
+        chain=os.environ.get("AI_REVIEW_CHAIN", "qwen,deepseek,volc-coding"),
+    )
+    if not raw:
+        return {"ok": False, "error": "AI 服务暂不可用"}
+    review = None
+    mm = _re.search(r"\{.*\}", raw, _re.S)
+    if mm:
+        try:
+            review = json.loads(mm.group(0))
+        except Exception:
+            review = None
+    if review is None:
+        # 模型没按 JSON 给, 退化为整段文本
+        return {"ok": True, "review": None, "review_text": raw.strip()}
+    # 自动沉淀教练记忆 (去重)
+    saved = []
+    notes = review.pop("memory_notes", None) or []
+    try:
+        existing = {m["note"] for m in get_coach_memories(conn, user_id, limit=30)}
+    except Exception:
+        existing = set()
+    for n in notes[:2]:
+        if isinstance(n, str) and len(n.strip()) >= 4 and n.strip() not in existing:
+            try:
+                add_coach_memory(conn, user_id, n.strip(), "observation")
+                saved.append(n.strip())
+            except Exception as e:
+                log.warning(f"save coach memory failed: {e}")
+    return {"ok": True, "review": review, "memory_saved": saved}

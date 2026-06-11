@@ -559,6 +559,53 @@ async def v2_ai_plan(req: Request):
     return JSONResponse({"ok": True, "plans": res or []})
 
 
+@app.post("/api/v2/ai/coach_review")
+async def v2_ai_coach_review(req: Request):
+    """私人教练管家: 整合历史数据+当前计划的系统复盘 (趋势/平衡/弱点/执行率/下周建议)."""
+    user = _require_user(req)
+    if not user:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    conn = get_db()
+    try:
+        res = ai_planner.coach_review(conn, user["user_id"])
+    finally:
+        conn.close()
+    return JSONResponse(res)
+
+
+@app.get("/api/v2/ai/memory")
+async def v2_ai_memory_list(req: Request):
+    """教练长期记忆列表."""
+    user = _require_user(req)
+    if not user:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    conn = get_db()
+    try:
+        notes = ai_planner.get_coach_memories(conn, user["user_id"], limit=30)
+    finally:
+        conn.close()
+    return JSONResponse({"ok": True, "memories": notes})
+
+
+@app.post("/api/v2/ai/memory")
+async def v2_ai_memory_add(req: Request):
+    """手动添加教练记忆 (如 '膝盖有旧伤' / '目标6月前减5kg')."""
+    user = _require_user(req)
+    if not user:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    body = await req.json()
+    note = (body.get("note") or "").strip()
+    if not note:
+        return JSONResponse({"ok": False, "error": "note required"}, status_code=400)
+    category = (body.get("category") or "general").strip()
+    conn = get_db()
+    try:
+        ai_planner.add_coach_memory(conn, user["user_id"], note, category)
+    finally:
+        conn.close()
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/v2/ai/chat")
 async def v2_ai_chat(req: Request):
     user = _require_user(req)
