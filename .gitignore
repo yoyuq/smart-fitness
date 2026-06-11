@@ -63,8 +63,14 @@ quant_simulate.py
 quant_test_period.py
 quant_v6_state.json
 
-# Certificates
+# Secrets & certificates
 *.pem
+.env
+backend/.env
+
+# Archived workspace clutter & release binaries
+_archive/
+releases/
 
 # OS
 Thumbs.db

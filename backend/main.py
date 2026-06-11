@@ -28,6 +28,12 @@ import sqlite3
 import os
 import threading
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass  # python-dotenv 未安装时退回纯环境变量
+
 from mqtt_client import MQTTClientHandler
 
 # ---------- App Initialization ----------

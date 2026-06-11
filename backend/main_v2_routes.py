@@ -295,6 +295,23 @@ async def v2_vision_infer_full(req: Request):
 
     # 训练态控制
     sess = active_trainings.get(device_id)
+    # 自动复活训练态: 如果推理帧带有 user_id + exercise, 但训练态丢了,
+    # 就在收到这条请求时自动恢复. 这样 ESP32 就算被意外 stop/掉态,
+    # 下一条 APP 二次推理帧进来就回到 500ms 帧率, 不用重新点开始.
+    if sess is None:
+        body_user_id = body.get("user_id") or None
+        body_exercise = (body.get("exercise") or body.get("exercise_type") or "").strip() or None
+        if device_id and body_user_id and body_exercise:
+            new_sid = f"sess_{body_user_id}_{int(time.time())}"
+            active_trainings[device_id] = {
+                "user_id": int(body_user_id),
+                "exercise": body_exercise,
+                "session_id": new_sid,
+                "started_at": time.time(),
+            }
+            sess = active_trainings[device_id]
+            log.warning(f"auto-revived training device={device_id} user={body_user_id} ex={body_exercise} sid={new_sid}")
+        # else: ESP32 预览模式(无 user_id/exercise) — 不复活, 保持降频
     paused = sess is None
     # APP preview also sends the selected exercise. Prefer active training state,
     # but fall back to request body so reps can be counted before/without WS lag.

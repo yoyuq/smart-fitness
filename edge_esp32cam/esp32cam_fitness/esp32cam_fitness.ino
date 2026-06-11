@@ -28,19 +28,20 @@
 // =====================================================
 // 配置
 // =====================================================
-static const char* WIFI_SSID   = "OPPO";
-static const char* WIFI_PASS   = "87654321";
+// Fill these before flashing locally. Do not commit real WiFi credentials.
+static const char* WIFI_SSID   = "YOUR_WIFI_SSID";
+static const char* WIFI_PASS   = "YOUR_WIFI_PASSWORD";
 
 static const char* SERVER_HOST = "192.168.72.56";
 static const int   SERVER_PORT = 8080;
 static const char* API_PATH    = "/api/v2/vision/infer/full";
 
 static const char* DEVICE_ID    = "esp32cam-001";
-static const char* DEVICE_TOKEN = "aabb35";
+static const char* DEVICE_TOKEN = "YOUR_DEVICE_TOKEN";
 
 #define ENABLE_OTA          1
 static const char* OTA_HOSTNAME = "esp32cam-fitness";
-static const char* OTA_PASSWORD = "fit2026";
+static const char* OTA_PASSWORD = "CHANGE_ME_OTA_PASSWORD";
 
 // MJPEG stream server 端口
 #define STREAM_PORT 81
@@ -76,8 +77,10 @@ static const char* OTA_PASSWORD = "fit2026";
 #define MIN_INTERVAL_MS        300
 #define MAX_INTERVAL_MS      30000
 
-#define MAX_FRAME_BYTES      40000
-#define MIN_FRAME_BYTES       8000
+// 识别优先: MediaPipe 对 320x240 + 高压缩很敏感，VGA 画面通常更容易出骨架。
+// AI-Thinker ESP32-CAM 有 PSRAM 时允许 120KB JPEG；无 PSRAM 会在 initCamera() 自动降回 QVGA。
+#define MAX_FRAME_BYTES     120000
+#define MIN_FRAME_BYTES      20000
 
 #define HTTP_TIMEOUT_MS       5000
 #define HTTP_MAX_RETRIES         2
@@ -88,7 +91,8 @@ static const char* OTA_PASSWORD = "fit2026";
 static WiFiClient client;
 static unsigned long last_capture_ms = 0;
 static unsigned long current_interval_ms = DEFAULT_INTERVAL_MS;
-static int  current_quality = 12;
+// ESP32 camera JPEG quality 数值越小画质越好。10 是画质/体积比较均衡的起点。
+static int  current_quality = 10;
 static int  capture_count = 0;
 static int  success_count = 0;
 static int  failure_count = 0;
@@ -149,8 +153,8 @@ esp_err_t streamHandler(httpd_req_t* req) {
 
         if (res != ESP_OK) break;
 
-        // ~10fps → 100ms/frame
-        vTaskDelay(pdMS_TO_TICKS(100));
+        // ~8fps。VGA 下 10fps 容易挤占推理通道，8fps 更稳。
+        vTaskDelay(pdMS_TO_TICKS(125));
     }
     return res;
 }
@@ -274,8 +278,9 @@ bool initCamera() {
     config.pin_reset    = RESET_GPIO_NUM;
     config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFORMAT_JPEG;
-    config.grab_mode    = CAMERA_GRAB_WHEN_EMPTY;
-    config.frame_size   = FRAMESIZE_QVGA;
+    // 低延迟取最新帧；有 PSRAM 时用 VGA，提升人体关键点识别率。
+    config.grab_mode    = CAMERA_GRAB_LATEST;
+    config.frame_size   = psramFound() ? FRAMESIZE_VGA : FRAMESIZE_QVGA;
     config.jpeg_quality = current_quality;
     // fb_count=2: 一个给 stream, 一个给 inference, 交替使用
     config.fb_count     = psramFound() ? 2 : 1;
@@ -294,10 +299,15 @@ bool initCamera() {
             s->set_brightness(s, 1);
             s->set_saturation(s, -2);
         }
-        s->set_framesize(s, FRAMESIZE_QVGA);
+        s->set_framesize(s, psramFound() ? FRAMESIZE_VGA : FRAMESIZE_QVGA);
+        s->set_quality(s, current_quality);
+        s->set_brightness(s, 1);
+        s->set_contrast(s, 1);
+        s->set_saturation(s, 0);
+        s->set_gainceiling(s, (gainceiling_t)6);
     }
 
-    Serial.printf("[CAM] init ok 320x240 JPEG q=%d\n", current_quality);
+    Serial.printf("[CAM] init ok %s JPEG q=%d\n", psramFound() ? "640x480" : "320x240", current_quality);
     return true;
 }
 
