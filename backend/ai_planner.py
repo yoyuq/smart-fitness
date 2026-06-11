@@ -22,6 +22,9 @@ log = logging.getLogger("ai_planner")
 # ====== Provider config (双备份: 火山 + DeepSeek) ======
 VOLC_API_KEY = os.environ.get("VOLC_ARK_API_KEY", "") or os.environ.get("ARK_API_KEY", "")
 VOLC_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+# Coding Plan 套餐专用 Anthropic 兼容端点 (provider 名: volc-coding)
+VOLC_CODING_URL = os.environ.get(
+    "VOLC_CODING_URL", "https://ark.cn-beijing.volces.com/api/coding/v1/messages")
 VOLC_MODEL = os.environ.get("VOLC_MODEL", "doubao-seed-1-6-250615")  # 旗舰
 VOLC_MODEL_FAST = os.environ.get("VOLC_MODEL_FAST", "doubao-1-5-lite-32k-250115")
 
@@ -83,6 +86,46 @@ def _call_volc(messages, max_tokens, temperature, model=None) -> Optional[str]:
         return None
 
 
+def _call_volc_coding(messages, max_tokens, temperature, model=None) -> Optional[str]:
+    """火山方舟 Coding Plan 套餐: Anthropic 兼容端点 /api/coding/v1/messages.
+
+    标准 chat completions 接口不计入 coding 套餐额度 (会报 AccountOverdue),
+    coding 套餐必须走这里, model 用 ark-code-latest.
+    """
+    if not (VOLC_API_KEY and requests):
+        return None
+    # OpenAI 风格 messages -> Anthropic 格式: system 单独提出
+    system_parts = [m["content"] for m in messages if m.get("role") == "system"]
+    anth_msgs = [m for m in messages if m.get("role") != "system"]
+    if not anth_msgs:
+        anth_msgs = [{"role": "user", "content": "."}]
+    body = {
+        "model": model or VOLC_MODEL,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": anth_msgs,
+    }
+    if system_parts:
+        body["system"] = "\n".join(system_parts)
+    try:
+        r = requests.post(
+            VOLC_CODING_URL,
+            headers={"x-api-key": VOLC_API_KEY, "anthropic-version": "2023-06-01",
+                     "Content-Type": "application/json"},
+            json=body,
+            timeout=TIMEOUT,
+        )
+        if r.status_code != 200:
+            log.warning(f"VolcCoding HTTP {r.status_code}: {r.text[:300]}")
+            return None
+        data = r.json()
+        return "".join(b.get("text", "") for b in data.get("content", [])
+                       if b.get("type") == "text").strip()
+    except Exception as e:
+        log.warning(f"VolcCoding call failed: {e}")
+        return None
+
+
 def _call_deepseek(messages, max_tokens, temperature) -> Optional[str]:
     if not (DEEPSEEK_API_KEY and requests):
         return None
@@ -121,6 +164,9 @@ def _call_llm(messages: List[Dict], max_tokens: int = 600, temperature: float = 
         prov = (prov or "").strip()
         if prov == "volc":
             out = _call_volc(messages, max_tokens, temperature)
+            if out: return out
+        elif prov == "volc-coding":
+            out = _call_volc_coding(messages, max_tokens, temperature)
             if out: return out
         elif prov == "deepseek":
             out = _call_deepseek(messages, max_tokens, temperature)
