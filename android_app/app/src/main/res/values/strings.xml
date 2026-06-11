@@ -10,10 +10,10 @@
     <string name="have_account_login">Already have an account? Login</string>
     <string name="logout">Log out</string>
 
-    <string name="home">Home</string>
-    <string name="training">Training</string>
-    <string name="plans">Plans</string>
-    <string name="profile">Profile</string>
+    <string name="home">首页</string>
+    <string name="training">训练</string>
+    <string name="plans">计划</string>
+    <string name="profile">我的</string>
 
     <string name="today_summary">今日概览</string>
     <string name="sessions">训练次数</string>

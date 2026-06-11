@@ -23,8 +23,11 @@ object UiKit {
             setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16))
         }
         val cardView = MaterialCardView(ctx).apply {
-            radius = dp(ctx, 20).toFloat()
-            cardElevation = dp(ctx, 2).toFloat()
+            // Keep 风格: 扁平白卡 + 细描边, 不用阴影
+            radius = dp(ctx, 16).toFloat()
+            cardElevation = 0f
+            strokeWidth = dp(ctx, 1)
+            strokeColor = ctx.getColor(R.color.divider)
             setCardBackgroundColor(ctx.getColor(R.color.surface))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,

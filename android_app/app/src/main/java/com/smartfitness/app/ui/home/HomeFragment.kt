@@ -42,6 +42,12 @@ class HomeFragment : Fragment() {
         calendarGrid = view.findViewById(R.id.calendar_grid)
         calendarSummary = view.findViewById(R.id.calendar_summary)
 
+        view.findViewById<View?>(R.id.btn_start_training)?.setOnClickListener {
+            requireActivity()
+                .findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_nav)
+                .selectedItemId = R.id.trainingFragment
+        }
+
         swipe.setOnRefreshListener { loadAll() }
         loadAll()
         // Task 3: 没走过初次引导的老用户也弹一下 (也覆盖了 token 注入开发场景)
@@ -194,19 +200,23 @@ class HomeFragment : Fragment() {
                             setMargins(gap, gap, gap, gap)
                         }
                         cell.layoutParams = lp
+                        // Keep 绿色阶
                         val color = when {
-                            reps == 0 -> 0xFFE5E7EB.toInt()
-                            reps < 10 -> 0xFFA7F3D0.toInt()
-                            reps < 30 -> 0xFF34D399.toInt()
-                            reps < 60 -> 0xFF10B981.toInt()
-                            else -> 0xFF047857.toInt()
+                            reps == 0 -> 0xFFF0F0F2.toInt()
+                            reps < 10 -> 0xFFB8EFD9.toInt()
+                            reps < 30 -> 0xFF6FDDB0.toInt()
+                            reps < 60 -> 0xFF24C789.toInt()
+                            else -> 0xFF17835C.toInt()
                         }
-                        cell.setBackgroundColor(color)
+                        cell.background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = ctx.resources.displayMetrics.density * 3
+                            setColor(color)
+                        }
                         grid.addView(cell)
                         cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
                     }
                 }
-                sum.text = "Active days: $activeDays / 84 | Total reps: $totalReps"
+                sum.text = "近 12 周活跃 $activeDays 天 · 累计 $totalReps 次"
             } catch (e: Exception) {
                 sum.text = "Calendar load failed: ${e.message}"
             }

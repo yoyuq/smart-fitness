@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Design system (Qwen-VL redesign 2026-06-12) -->
-    <color name="primary">#2ECC71</color>
-    <color name="primary_dark">#27AE60</color>
-    <color name="accent">#3498DB</color>
-    <color name="bg">#F8F7FA</color>
+    <!-- Design system v3: Keep 风格 (2026-06-12) -->
+    <color name="primary">#24C789</color>
+    <color name="primary_dark">#1DA86F</color>
+    <color name="primary_light">#E6F9F1</color>
+    <color name="accent">#24C789</color>
+    <color name="bg">#F7F8FA</color>
     <color name="surface">#FFFFFF</color>
-    <color name="on_surface">#2D2D2D</color>
-    <color name="on_surface_secondary">#6C6C6C</color>
+    <color name="on_surface">#14142B</color>
+    <color name="on_surface_secondary">#9094A6</color>
+    <color name="divider">#F0F0F2</color>
     <color name="success">#2ECC71</color>
     <color name="warning">#F39C12</color>
     <color name="error">#E74C3C</color>
