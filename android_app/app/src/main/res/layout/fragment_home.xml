@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/swipe_refresh"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="@color/bg">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -19,24 +21,25 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/today_summary"
-                android:textSize="22sp"
+                android:textSize="24sp"
                 android:textStyle="bold"
+                android:textColor="@color/on_surface"
                 android:layout_marginBottom="16dp" />
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="16dp"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="20dp"
                 app:cardElevation="2dp"
-                xmlns:app="http://schemas.android.com/apk/res-auto">
+                app:cardBackgroundColor="@color/surface">
 
                 <GridLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:columnCount="2"
                     android:rowCount="2"
-                    android:padding="20dp">
+                    android:padding="16dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -47,14 +50,17 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/sessions" />
+                            android:text="🏋️ Sessions"
+                            android:textSize="14sp"
+                            android:textColor="@color/on_surface_secondary" />
                         <TextView
                             android:id="@+id/stat_sessions"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="0"
-                            android:textSize="28sp"
-                            android:textStyle="bold" />
+                            android:textSize="32sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/primary" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -66,14 +72,17 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/total_reps" />
+                            android:text="💪 Total Reps"
+                            android:textSize="14sp"
+                            android:textColor="@color/on_surface_secondary" />
                         <TextView
                             android:id="@+id/stat_reps"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="0"
-                            android:textSize="28sp"
-                            android:textStyle="bold" />
+                            android:textSize="32sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/on_surface" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -85,14 +94,17 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/total_minutes" />
+                            android:text="⏱️ Minutes"
+                            android:textSize="14sp"
+                            android:textColor="@color/on_surface_secondary" />
                         <TextView
                             android:id="@+id/stat_minutes"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="0.0"
-                            android:textSize="28sp"
-                            android:textStyle="bold" />
+                            android:textSize="32sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/on_surface" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -104,14 +116,17 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/avg_score" />
+                            android:text="📊 Avg Score"
+                            android:textSize="14sp"
+                            android:textColor="@color/on_surface_secondary" />
                         <TextView
                             android:id="@+id/stat_score"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="0.0"
-                            android:textSize="28sp"
-                            android:textStyle="bold" />
+                            android:textSize="32sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/accent" />
                     </LinearLayout>
                 </GridLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -120,10 +135,10 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="16dp"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="20dp"
                 app:cardElevation="2dp"
-                xmlns:app="http://schemas.android.com/apk/res-auto">
+                app:cardBackgroundColor="@color/surface">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -134,9 +149,10 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Training Calendar (last 12 weeks)"
-                        android:textSize="16sp"
+                        android:text="📅 Training Calendar (last 12 weeks)"
+                        android:textSize="18sp"
                         android:textStyle="bold"
+                        android:textColor="@color/on_surface"
                         android:layout_marginBottom="12dp" />
 
                     <GridLayout
@@ -153,24 +169,42 @@
                         android:text="Loading..."
                         android:textSize="12sp"
                         android:layout_marginTop="8dp"
-                        android:textColor="#888888" />
+                        android:textColor="@color/on_surface_secondary" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Recent Plans"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="8dp" />
-
-            <LinearLayout
-                android:id="@+id/plans_container"
+            <!-- 动态内容 (streak/成就/近况/计划) 由 HomeFragment 填充 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@color/surface">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📌 Recent"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/on_surface"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="8dp" />
+
+                    <LinearLayout
+                        android:id="@+id/plans_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </ScrollView>
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

@@ -16,6 +16,7 @@ import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.button.MaterialButton
 import com.smartfitness.app.R
+import com.smartfitness.app.ui.UiKit
 import com.smartfitness.app.api.ApiClient
 import com.smartfitness.app.model.BindDeviceRequest
 import com.smartfitness.app.model.BodyMetricRequest
@@ -57,114 +58,117 @@ class ProfileFragment : Fragment() {
             )
         }
         scroll.addView(root)
+        scroll.setBackgroundColor(ctx.getColor(R.color.bg))
         with(root) {
 
-            usernameView = TextView(ctx).apply { textSize = 22f }.also { addView(it) }
-            createdAtView = TextView(ctx).apply { textSize = 14f }.also { addView(it) }
-
-            // E-04 身体指标区
-            addView(TextView(ctx).apply {
-                text = "身体指标"
-                textSize = 18f
-                setPadding(0, 48, 0, 16)
-            })
-            bodyMetricView = TextView(ctx).apply {
-                textSize = 14f
-                text = "(未记录)"
+            usernameView = TextView(ctx).apply {
+                textSize = 24f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(ctx.getColor(R.color.on_surface))
             }.also { addView(it) }
-            addView(MaterialButton(ctx).apply {
-                text = "记录体重 / 身高"
-                setOnClickListener { showBodyMetricDialog() }
-            })
-
-            addView(TextView(ctx).apply {
-                text = getString(R.string.devices)
-                textSize = 18f
-                setPadding(0, 48, 0, 16)
-            })
-
-            devicesContainer = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
+            createdAtView = TextView(ctx).apply {
+                textSize = 13f
+                setTextColor(ctx.getColor(R.color.on_surface_secondary))
+                setPadding(0, 4, 0, UiKit.dp(ctx, 16))
             }.also { addView(it) }
 
-            addView(MaterialButton(ctx).apply {
-                text = getString(R.string.register_device)
-                setOnClickListener { registerDevice() }
-            })
+            // 身体指标卡片
+            UiKit.card(ctx).let { (cardView, inner) ->
+                inner.addView(UiKit.cardTitle(ctx, "📏 身体指标"))
+                bodyMetricView = UiKit.body(ctx, "(未记录)").also { inner.addView(it) }
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "记录体重 / 身高"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { showBodyMetricDialog() }
+                })
+                addView(cardView)
+            }
 
-            // E-07 ESP32 设备绑定区
-            addView(TextView(ctx).apply {
-                text = "ESP32 绑定"
-                textSize = 18f
-                setPadding(0, 48, 0, 16)
-            })
-            bindingsContainer = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-            }.also { addView(it) }
-            addView(MaterialButton(ctx).apply {
-                text = "绑定 ESP32 设备"
-                setOnClickListener { showBindDialog() }
-            })
+            // 设备卡片 (手机注册 + ESP32 绑定)
+            UiKit.card(ctx).let { (cardView, inner) ->
+                inner.addView(UiKit.cardTitle(ctx, "📱 " + getString(R.string.devices)))
+                devicesContainer = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                }.also { inner.addView(it) }
+                inner.addView(MaterialButton(ctx).apply {
+                    text = getString(R.string.register_device)
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { registerDevice() }
+                })
+                inner.addView(UiKit.caption(ctx, "ESP32 绑定").apply {
+                    setPadding(0, UiKit.dp(ctx, 8), 0, 0)
+                })
+                bindingsContainer = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                }.also { inner.addView(it) }
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "绑定 ESP32 设备"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { showBindDialog() }
+                })
+                addView(cardView)
+            }
 
-            // Task 2: 个人目标
-            addView(TextView(ctx).apply {
-                text = "我的目标"
-                textSize = 18f
-                setPadding(0, 48, 0, 16)
-            })
-            goalsView = TextView(ctx).apply {
-                textSize = 14f
-                text = "(未设置)"
-            }.also { addView(it) }
-            addView(MaterialButton(ctx).apply {
-                text = "设置目标"
-                setOnClickListener { showGoalsDialog() }
-            })
+            // 目标卡片
+            UiKit.card(ctx).let { (cardView, inner) ->
+                inner.addView(UiKit.cardTitle(ctx, "🎯 我的目标"))
+                goalsView = UiKit.body(ctx, "(未设置)").also { inner.addView(it) }
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "设置目标"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { showGoalsDialog() }
+                })
+                addView(cardView)
+            }
 
-            // Task 2: 成就
-            addView(TextView(ctx).apply {
-                text = "🏆 成就"
-                textSize = 18f
-                setPadding(0, 48, 0, 16)
-            })
-            achievementsView = TextView(ctx).apply {
-                textSize = 14f
-                text = "加载中..."
-            }.also { addView(it) }
+            // 成就卡片
+            UiKit.card(ctx).let { (cardView, inner) ->
+                inner.addView(UiKit.cardTitle(ctx, "🏆 成就"))
+                achievementsView = UiKit.body(ctx, "加载中...", 14f).also { inner.addView(it) }
+                addView(cardView)
+            }
 
-            // AI 私人教练管家 (2026-06-11)
-            addView(TextView(ctx).apply {
-                text = "🤖 AI 私人教练"
-                textSize = 18f
-                setPadding(0, 48, 0, 16)
-            })
-            addView(MaterialButton(ctx).apply {
-                text = "🧠 教练复盘 (分析我的数据)"
-                setOnClickListener { showCoachReview() }
-            })
-            addView(MaterialButton(ctx).apply {
-                text = "💬 告诉教练 (伤病/目标/偏好)"
-                setOnClickListener { showAddMemoryDialog() }
-            })
+            // AI 私人教练卡片 (核心卖点)
+            UiKit.card(ctx).let { (cardView, inner) ->
+                inner.addView(UiKit.cardTitle(ctx, "🤖 AI 私人教练"))
+                inner.addView(UiKit.caption(ctx, "你的专属健身伙伴 · 懂你的数据和身体"))
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "🧠 教练复盘 (分析我的数据)"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { showCoachReview() }
+                })
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "💬 告诉教练 (伤病/目标/偏好)"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { showAddMemoryDialog() }
+                })
+                addView(cardView)
+            }
 
-            addView(MaterialButton(ctx).apply {
-                text = "📊 Export My Data (CSV)"
-                setOnClickListener { exportCsv() }
-            })
-
-            addView(MaterialButton(ctx).apply {
-                text = getString(R.string.logout)
-                setOnClickListener {
-                    ApiClient.clearAuth()
-                    findNavController().navigate(R.id.loginFragment, null, NavOptions.Builder().setPopUpTo(R.id.loginFragment, true).build())
-                }
-            })
-
-            // 服务器地址设置 (真机调试用)
-            addView(MaterialButton(ctx).apply {
-                text = "服务器地址 (高级)"
-                setOnClickListener { showBaseUrlDialog() }
-            })
+            // 数据与账号卡片
+            UiKit.card(ctx).let { (cardView, inner) ->
+                inner.addView(UiKit.cardTitle(ctx, "⚙️ 数据与账号"))
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "📊 导出我的数据 (CSV)"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { exportCsv() }
+                })
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "服务器地址 (高级)"
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setOnClickListener { showBaseUrlDialog() }
+                })
+                inner.addView(MaterialButton(ctx).apply {
+                    text = getString(R.string.logout)
+                    cornerRadius = UiKit.dp(ctx, 12)
+                    setBackgroundColor(ctx.getColor(R.color.error))
+                    setOnClickListener {
+                        ApiClient.clearAuth()
+                        findNavController().navigate(R.id.loginFragment, null, NavOptions.Builder().setPopUpTo(R.id.loginFragment, true).build())
+                    }
+                })
+                addView(cardView)
+            }
         }
         return scroll
     }
@@ -195,24 +199,7 @@ class ProfileFragment : Fragment() {
                     Toast.makeText(requireContext(), "复盘失败: ${r.error ?: "AI 暂不可用"}", Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                val rv = r.review
-                val text = if (rv != null) buildString {
-                    rv.trend?.let { append("📈 趋势\n$it\n\n") }
-                    rv.balance?.let { append("⚖️ 动作平衡\n$it\n\n") }
-                    rv.weakness?.let { append("🎯 弱点\n$it\n\n") }
-                    rv.adherence?.let { append("📋 计划执行\n$it\n\n") }
-                    rv.nextWeek?.takeIf { it.isNotEmpty() }?.let { nw ->
-                        append("🗓 下周建议\n")
-                        nw.forEach { append("• $it\n") }
-                        append("\n")
-                    }
-                    rv.encouragement?.let { append("🔥 $it") }
-                } else (r.reviewText ?: "(无内容)")
-                AlertDialog.Builder(requireContext())
-                    .setTitle("🧠 AI 教练复盘")
-                    .setMessage(text.trim())
-                    .setPositiveButton("收到", null)
-                    .show()
+                showReviewSheet(r.review, r.reviewText)
             } catch (e: Exception) {
                 if (isAdded) {
                     loading.dismiss()
@@ -220,6 +207,75 @@ class ProfileFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /** 复盘结果 BottomSheet (设计规范: 24dp 圆角, 图标+标题+正文三段式, 激励句强调色) */
+    private fun showReviewSheet(rv: com.smartfitness.app.model.CoachReview?, fallback: String?) {
+        val ctx = requireContext()
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(ctx)
+        val scroll = android.widget.ScrollView(ctx)
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(ctx.getColor(R.color.surface))
+            setPadding(UiKit.dp(ctx, 24), UiKit.dp(ctx, 20), UiKit.dp(ctx, 24), UiKit.dp(ctx, 24))
+        }
+        scroll.addView(box)
+
+        box.addView(TextView(ctx).apply {
+            text = "🧠 AI 教练复盘"
+            textSize = 22f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(ctx.getColor(R.color.on_surface))
+        })
+        box.addView(UiKit.caption(ctx, "基于你的真实训练数据生成").apply {
+            setPadding(0, 4, 0, UiKit.dp(ctx, 8))
+        })
+
+        fun section(title: String, bodyText: String?) {
+            if (bodyText.isNullOrBlank()) return
+            box.addView(TextView(ctx).apply {
+                text = title
+                textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(ctx.getColor(R.color.on_surface))
+                setPadding(0, UiKit.dp(ctx, 10), 0, 2)
+            })
+            box.addView(UiKit.body(ctx, bodyText))
+        }
+
+        if (rv != null) {
+            section("📈 趋势", rv.trend)
+            section("⚖️ 动作平衡", rv.balance)
+            section("🎯 弱点", rv.weakness)
+            section("📋 计划执行", rv.adherence)
+            rv.nextWeek?.takeIf { it.isNotEmpty() }?.let { nw ->
+                section("🗓 下周建议", nw.joinToString("\n") { "• $it" })
+            }
+            rv.encouragement?.let {
+                box.addView(TextView(ctx).apply {
+                    text = "🔥 $it"
+                    textSize = 15f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setTextColor(ctx.getColor(R.color.warning))
+                    setPadding(0, UiKit.dp(ctx, 12), 0, 0)
+                })
+            }
+        } else {
+            box.addView(UiKit.body(ctx, fallback ?: "(无内容)"))
+        }
+
+        box.addView(MaterialButton(ctx).apply {
+            text = "收到 💪"
+            cornerRadius = UiKit.dp(ctx, 12)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = UiKit.dp(ctx, 16) }
+            setOnClickListener { sheet.dismiss() }
+        })
+
+        sheet.setContentView(scroll)
+        sheet.show()
     }
 
     private fun showAddMemoryDialog() {
