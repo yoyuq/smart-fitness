@@ -75,9 +75,9 @@ print(f'[A-06] Stats daily:  {code} ok={sd.get("ok")} sessions={sd.get("stats",{
 code, sw = req('GET', '/api/v2/stats/weekly', token=tok)
 print(f'[A-06] Stats weekly: {code} ok={sw.get("ok")} days={len(sw.get("weekly",[]))}')
 
-# 12. WS push endpoint (test without actual WS)
+# 12. WS push endpoint (admin/test route, requires auth; no live WS so delivered=0)
 code, wp = req('POST', '/api/v2/ws/push',
-    {'target': 'session:test-123', 'message': {'type': 'ping', 'data': 'hello'}})
+    {'target': 'session:test-123', 'message': {'type': 'ping', 'data': 'hello'}}, token=tok)
 print(f'[A-07] WS push:     {code} ok={wp.get("ok")}')
 
 # 13. Health check

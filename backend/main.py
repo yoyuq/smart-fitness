@@ -52,6 +52,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------- PWA (PC 浏览器瘦客户端) ----------
+# static/index.html 是 PC 端网页训练界面; v2 重写 main 时挂载被丢掉, 这里恢复
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+if os.path.isdir(_STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+    @app.get("/app")
+    async def pwa_redirect():
+        return RedirectResponse("/static/index.html")
+
 # ---------- Database Setup ----------
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "fitness.db")
