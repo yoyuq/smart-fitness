@@ -107,16 +107,21 @@ async def x_plans_delete(plan_id: str, req: Request):
 # Stats: daily / weekly
 # ============================================================
 def _stats_summary(user_id: int, since_ts: float):
-    """从 user_exercise_log 聚合后兼容老字段."""
+    """聚合训练统计.
+
+    注意: 实际训练链路 (workout/summary) 写入的是 exercise_log 表;
+    user_exercise_log 只有手动记录 API 在写. 此前从 user_exercise_log
+    聚合导致 Today's Summary 永远为 0.
+    """
     c = _db()
     try:
         # 概要
         row = c.execute(
-            "SELECT COUNT(DISTINCT session_id) AS sessions_count, "
+            "SELECT COUNT(*)                      AS sessions_count, "
             "       COALESCE(SUM(reps), 0)        AS total_reps, "
-            "       COALESCE(SUM(duration_seconds), 0) AS total_seconds, "
-            "       AVG(avg_form_score)          AS avg_score "
-            "FROM user_exercise_log WHERE user_id=? AND performed_at>=?",
+            "       COALESCE(SUM(duration_s), 0)  AS total_seconds, "
+            "       AVG(avg_form_score)           AS avg_score "
+            "FROM exercise_log WHERE user_id=? AND created_at>=?",
             (user_id, since_ts)
         ).fetchone()
 
