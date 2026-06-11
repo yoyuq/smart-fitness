@@ -120,3 +120,6 @@ TEAM_REPORT.md
 # Linux start scripts
 start.sh
 stop.sh
+
+# PoC outputs
+ml_pose/poc_out/
