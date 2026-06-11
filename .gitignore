@@ -87,13 +87,11 @@ quant_ui/
 .claude_tasks/
 .openclaw/
 .github/
-pc_simulator/
 deploy/
 edge_device/
 docs/
 hardware/
 prompts/
-tests/
 ai_vision/
 
 # Workspace noise
