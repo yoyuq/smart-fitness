@@ -35,9 +35,10 @@ DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 # 默认优先: volc -> deepseek
 PROVIDER_PRIORITY = os.environ.get("AI_PROVIDER_PRIORITY", "volc,deepseek").split(",")
 
-TIMEOUT = 60
+TIMEOUT = int(os.environ.get("AI_TIMEOUT", "180"))
 MAX_TOKENS_SUMMARY = 800
-MAX_TOKENS_PLAN = 2500
+# v4 系列是推理模型, reasoning tokens 计入 max_tokens; 2500 会被思考烧光导致正文为空
+MAX_TOKENS_PLAN = int(os.environ.get("AI_MAX_TOKENS_PLAN", "6000"))
 MAX_TOKENS_CHAT = 1000
 
 # 兼容旧变量名
@@ -153,13 +154,16 @@ def _call_deepseek(messages, max_tokens, temperature) -> Optional[str]:
 
 def _call_llm(messages: List[Dict], max_tokens: int = 600, temperature: float = 0.6,
               prefer: Optional[str] = None) -> Optional[str]:
-    """按优先级调用 provider, 失败 fallback."""
-    order = [prefer] if prefer else list(PROVIDER_PRIORITY)
-    if not prefer:
-        # 去重 + 补上没在 priority 里的
-        for p in ["volc", "deepseek"]:
-            if p not in order:
-                order.append(p)
+    """按优先级调用 provider, 失败 fallback. prefer 指定的排第一, 其余仍兜底."""
+    order = list(PROVIDER_PRIORITY)
+    for p in ["volc-coding", "volc", "deepseek"]:
+        if p not in order:
+            order.append(p)
+    if prefer and prefer in order:
+        order.remove(prefer)
+        order.insert(0, prefer)
+    elif prefer:
+        order.insert(0, prefer)
     for prov in order:
         prov = (prov or "").strip()
         if prov == "volc":
@@ -354,16 +358,19 @@ def generate_plan(conn, user_id, goal, weeks=4):
   "intensity_note": "热身组, 不到力竭"
 }}
 
-约束:
-- 一周 5-6 个训练日, 1-2 休息
+约束(必须全部满足):
+- 如果用户目标中指明了每周训练天数, 每周的不同 day 数量必须严格等于该天数; 否则一周 5-6 个训练日
 - 渐进 (后周 reps/sets 增加)
 - 涵盖动作: squat, push_up, lunge, plank, bicep_curl, shoulder_press, jumping_jack
 - 总长度不超过 {weeks * 6} 条
+- intensity_note 必须针对该动作给出具体技术要点(发力位置/常见错误/器械用法), 禁止"中等强度""保留X次"这类通用模板, 禁止任意两条重复; 如果用户提到器械限制, 备注要体现该器械的具体用法
 - 必须是合法 JSON, 第一个字符是 ["""
     raw = _call_llm(
         [{"role": "system", "content": SYSTEM_PROMPT_BASE + " 严格按要求只输出 JSON 数组, 不要任何额外文字."},
          {"role": "user", "content": prompt}],
-        max_tokens=MAX_TOKENS_PLAN, temperature=0.4
+        max_tokens=MAX_TOKENS_PLAN, temperature=0.4,
+        # 长 JSON 生成对延迟敏感, 默认偏好 deepseek (可用 AI_PLAN_PROVIDER 覆盖)
+        prefer=os.environ.get("AI_PLAN_PROVIDER", "deepseek"),
     )
     if not raw:
         return {"ok": False, "error": "LLM 调用失败", "plans": []}
