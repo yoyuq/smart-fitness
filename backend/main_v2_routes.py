@@ -271,6 +271,24 @@ async def v2_train_stop(req: Request):
     device_id = (body.get("device_id") or "").strip()
     sess = active_trainings.pop(device_id, None)
     log.info(f"training stop device={device_id} had={bool(sess)}")
+    # 训练结束落库 sessions, 否则 /api/v2/sessions/history 永远为空
+    if sess:
+        try:
+            conn = get_db()
+            row = conn.execute(
+                "SELECT MAX(rep_count) AS reps, AVG(form_score) AS form FROM pose_data WHERE session_id=?",
+                (sess["session_id"],)).fetchone()
+            total_reps = int(row["reps"]) if row and row["reps"] is not None else 0
+            avg_form = round(row["form"], 1) if row and row["form"] is not None else None
+            conn.execute(
+                "INSERT OR REPLACE INTO sessions (session_id, device_id, user_id, exercise_type, "
+                "start_time, end_time, total_reps, avg_form_score, status) VALUES (?,?,?,?,?,?,?,?,?)",
+                (sess["session_id"], device_id, str(sess["user_id"]), sess["exercise"],
+                 sess["started_at"], time.time(), total_reps, avg_form, "completed"))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.warning(f"session persist failed: {e}")
     return JSONResponse({"ok": True, "stopped": bool(sess), "session_id": sess["session_id"] if sess else None})
 
 
@@ -383,9 +401,11 @@ async def v2_vision_infer_full(req: Request):
                         try:
                             conn = get_db()
                             conn.execute(
-                                "INSERT INTO pose_data (session_id, timestamp, keypoints, body_angle, status) VALUES (?, ?, ?, ?, ?)",
-                                (session_id, int(time.time()), json.dumps(landmarks_out),
-                                 angles.get("torso_tilt", 0), exercise_pred)
+                                "INSERT INTO pose_data (session_id, timestamp, exercise_type, rep_count, "
+                                "form_score, angles_json, landmarks_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (session_id, time.time(), exercise_pred, rep_count, form_score,
+                                 json.dumps({k: round(v, 2) for k, v in angles.items() if v is not None}),
+                                 json.dumps(landmarks_out))
                             )
                             conn.commit()
                             conn.close()
