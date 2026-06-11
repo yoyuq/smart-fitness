@@ -132,6 +132,21 @@ class ProfileFragment : Fragment() {
                 text = "加载中..."
             }.also { addView(it) }
 
+            // AI 私人教练管家 (2026-06-11)
+            addView(TextView(ctx).apply {
+                text = "🤖 AI 私人教练"
+                textSize = 18f
+                setPadding(0, 48, 0, 16)
+            })
+            addView(MaterialButton(ctx).apply {
+                text = "🧠 教练复盘 (分析我的数据)"
+                setOnClickListener { showCoachReview() }
+            })
+            addView(MaterialButton(ctx).apply {
+                text = "💬 告诉教练 (伤病/目标/偏好)"
+                setOnClickListener { showAddMemoryDialog() }
+            })
+
             addView(MaterialButton(ctx).apply {
                 text = "📊 Export My Data (CSV)"
                 setOnClickListener { exportCsv() }
@@ -161,6 +176,96 @@ class ProfileFragment : Fragment() {
         loadBindings()
         loadGoals()
         loadAchievements()
+    }
+
+    // ---------- AI 私人教练管家 ----------
+
+    private fun showCoachReview() {
+        val loading = AlertDialog.Builder(requireContext())
+            .setTitle("🧠 AI 教练复盘")
+            .setMessage("教练正在分析你的训练数据…(约 30 秒)")
+            .setCancelable(true)
+            .show()
+        lifecycleScope.launch {
+            try {
+                val r = withContext(Dispatchers.IO) { ApiClient.service.coachReview() }
+                if (!isAdded) return@launch
+                loading.dismiss()
+                if (!r.ok) {
+                    Toast.makeText(requireContext(), "复盘失败: ${r.error ?: "AI 暂不可用"}", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                val rv = r.review
+                val text = if (rv != null) buildString {
+                    rv.trend?.let { append("📈 趋势\n$it\n\n") }
+                    rv.balance?.let { append("⚖️ 动作平衡\n$it\n\n") }
+                    rv.weakness?.let { append("🎯 弱点\n$it\n\n") }
+                    rv.adherence?.let { append("📋 计划执行\n$it\n\n") }
+                    rv.nextWeek?.takeIf { it.isNotEmpty() }?.let { nw ->
+                        append("🗓 下周建议\n")
+                        nw.forEach { append("• $it\n") }
+                        append("\n")
+                    }
+                    rv.encouragement?.let { append("🔥 $it") }
+                } else (r.reviewText ?: "(无内容)")
+                AlertDialog.Builder(requireContext())
+                    .setTitle("🧠 AI 教练复盘")
+                    .setMessage(text.trim())
+                    .setPositiveButton("收到", null)
+                    .show()
+            } catch (e: Exception) {
+                if (isAdded) {
+                    loading.dismiss()
+                    Toast.makeText(requireContext(), "复盘失败: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun showAddMemoryDialog() {
+        val input = EditText(requireContext()).apply {
+            hint = "如: 膝盖有旧伤 / 目标3个月减5kg"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("💬 告诉教练")
+            .setMessage("教练会长期记住这条信息, 在复盘/对话/排计划时考虑它")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val note = input.text.toString().trim()
+                if (note.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            ApiClient.service.addCoachMemory(com.smartfitness.app.model.CoachMemoryAddRequest(note))
+                        }
+                        if (isAdded) Toast.makeText(requireContext(), "教练记住了 ✅", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        if (isAdded) Toast.makeText(requireContext(), "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNeutralButton("查看记忆") { _, _ -> showMemories() }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showMemories() {
+        lifecycleScope.launch {
+            try {
+                val r = withContext(Dispatchers.IO) { ApiClient.service.coachMemories() }
+                if (!isAdded) return@launch
+                val text = if (r.memories.isEmpty()) "(教练还没有记忆)"
+                else r.memories.joinToString("\n\n") { "• [${it.category ?: "general"}] ${it.note}" }
+                AlertDialog.Builder(requireContext())
+                    .setTitle("教练的记忆")
+                    .setMessage(text)
+                    .setPositiveButton("OK", null)
+                    .show()
+            } catch (e: Exception) {
+                if (isAdded) Toast.makeText(requireContext(), "加载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun formatTimestamp(ts: Double?): String {

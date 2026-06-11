@@ -122,4 +122,14 @@ interface ApiService {
     // ---------- AI Plan Generate (LLM) ----------
     @POST("api/v2/ai/plan_generate")
     suspend fun aiGeneratePlan(@Body req: AiPlanGenerateRequest): AiPlanGenerateResponse
+
+    // ---------- AI Coach Butler: 复盘 + 教练记忆 (2026-06-11) ----------
+    @POST("api/v2/ai/coach_review")
+    suspend fun coachReview(): CoachReviewResponse
+
+    @GET("api/v2/ai/memory")
+    suspend fun coachMemories(): CoachMemoryListResponse
+
+    @POST("api/v2/ai/memory")
+    suspend fun addCoachMemory(@Body req: CoachMemoryAddRequest): GenericOkResponse
 }

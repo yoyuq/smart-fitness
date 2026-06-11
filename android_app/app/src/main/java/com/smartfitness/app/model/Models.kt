@@ -488,3 +488,40 @@ data class AiPlanDay(
     @com.google.gson.annotations.SerializedName("target_sets") val targetSets: Int = 0,
     @com.google.gson.annotations.SerializedName("intensity_note") val intensityNote: String? = null,
 )
+
+// =============================================================
+// AI Coach Butler (2026-06-11)
+// =============================================================
+data class CoachReview(
+    val trend: String? = null,
+    val balance: String? = null,
+    val weakness: String? = null,
+    val adherence: String? = null,
+    @com.google.gson.annotations.SerializedName("next_week") val nextWeek: List<String>? = null,
+    val encouragement: String? = null,
+)
+
+data class CoachReviewResponse(
+    val ok: Boolean = false,
+    val review: CoachReview? = null,
+    @com.google.gson.annotations.SerializedName("review_text") val reviewText: String? = null,
+    @com.google.gson.annotations.SerializedName("memory_saved") val memorySaved: List<String>? = null,
+    val error: String? = null,
+)
+
+data class CoachMemoryItem(
+    val id: Long = 0,
+    val category: String? = null,
+    val note: String = "",
+    @com.google.gson.annotations.SerializedName("created_at") val createdAt: Long? = null,
+)
+
+data class CoachMemoryListResponse(
+    val ok: Boolean = false,
+    val memories: List<CoachMemoryItem> = emptyList(),
+)
+
+data class CoachMemoryAddRequest(
+    val note: String,
+    val category: String = "general",
+)
