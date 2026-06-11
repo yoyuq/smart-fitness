@@ -50,7 +50,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="🏋️ Sessions"
+                            android:text="@string/sessions"
                             android:textSize="14sp"
                             android:textColor="@color/on_surface_secondary" />
                         <TextView
@@ -72,7 +72,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="💪 Total Reps"
+                            android:text="@string/total_reps"
                             android:textSize="14sp"
                             android:textColor="@color/on_surface_secondary" />
                         <TextView
@@ -94,7 +94,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="⏱️ Minutes"
+                            android:text="@string/total_minutes"
                             android:textSize="14sp"
                             android:textColor="@color/on_surface_secondary" />
                         <TextView
@@ -116,7 +116,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="📊 Avg Score"
+                            android:text="@string/avg_score"
                             android:textSize="14sp"
                             android:textColor="@color/on_surface_secondary" />
                         <TextView
@@ -149,7 +149,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="📅 Training Calendar (last 12 weeks)"
+                        android:text="训练日历 (近 12 周)"
                         android:textSize="18sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface"
@@ -191,7 +191,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="📌 Recent"
+                        android:text="动态"
                         android:textSize="18sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface"

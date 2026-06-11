@@ -67,34 +67,28 @@ class ProfileFragment : Fragment() {
                 setTextColor(ctx.getColor(R.color.on_surface))
             }.also { addView(it) }
             createdAtView = TextView(ctx).apply {
-                textSize = 13f
+                textSize = 12f
                 setTextColor(ctx.getColor(R.color.on_surface_secondary))
                 setPadding(0, 4, 0, UiKit.dp(ctx, 16))
             }.also { addView(it) }
 
             // 身体指标卡片
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "📏 身体指标"))
-                bodyMetricView = UiKit.body(ctx, "(未记录)").also { inner.addView(it) }
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "记录体重 / 身高"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { showBodyMetricDialog() }
-                })
+                inner.addView(UiKit.cardTitle(ctx, "身体指标"))
+                bodyMetricView = UiKit.body(ctx, "暂无数据, 记录后教练更懂你").apply {
+                    setTextColor(ctx.getColor(R.color.hint))
+                }.also { inner.addView(it) }
+                inner.addView(UiKit.outlinedButton(ctx, "记录体重 / 身高") { showBodyMetricDialog() })
                 addView(cardView)
             }
 
             // 设备卡片 (手机注册 + ESP32 绑定)
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "📱 " + getString(R.string.devices)))
+                inner.addView(UiKit.cardTitle(ctx, getString(R.string.devices)))
                 devicesContainer = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
                 }.also { inner.addView(it) }
-                inner.addView(MaterialButton(ctx).apply {
-                    text = getString(R.string.register_device)
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { registerDevice() }
-                })
+                inner.addView(UiKit.outlinedButton(ctx, getString(R.string.register_device)) { registerDevice() })
                 inner.addView(UiKit.caption(ctx, "ESP32 绑定").apply {
                     setPadding(0, UiKit.dp(ctx, 8), 0, 0)
                 })
@@ -111,53 +105,39 @@ class ProfileFragment : Fragment() {
 
             // 目标卡片
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "🎯 我的目标"))
-                goalsView = UiKit.body(ctx, "(未设置)").also { inner.addView(it) }
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "设置目标"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { showGoalsDialog() }
-                })
+                inner.addView(UiKit.cardTitle(ctx, "我的目标"))
+                goalsView = UiKit.body(ctx, "暂无目标, 立即设置").apply {
+                    setTextColor(ctx.getColor(R.color.hint))
+                }.also { inner.addView(it) }
+                inner.addView(UiKit.outlinedButton(ctx, "设置目标") { showGoalsDialog() })
                 addView(cardView)
             }
 
             // 成就卡片
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "🏆 成就"))
+                inner.addView(UiKit.cardTitle(ctx, "成就"))
                 achievementsView = UiKit.body(ctx, "加载中...", 14f).also { inner.addView(it) }
                 addView(cardView)
             }
 
             // AI 私人教练卡片 (核心卖点)
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "🤖 AI 私人教练"))
+                inner.addView(UiKit.cardTitle(ctx, "AI 私人教练"))
                 inner.addView(UiKit.caption(ctx, "你的专属健身伙伴 · 懂你的数据和身体"))
                 inner.addView(MaterialButton(ctx).apply {
-                    text = "🧠 教练复盘 (分析我的数据)"
+                    text = "教练复盘 (分析我的数据)"
                     cornerRadius = UiKit.dp(ctx, 12)
                     setOnClickListener { showCoachReview() }
                 })
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "💬 告诉教练 (伤病/目标/偏好)"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { showAddMemoryDialog() }
-                })
+                inner.addView(UiKit.outlinedButton(ctx, "告诉教练 (伤病 / 目标 / 偏好)") { showAddMemoryDialog() })
                 addView(cardView)
             }
 
             // 数据与账号卡片
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "⚙️ 数据与账号"))
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "📊 导出我的数据 (CSV)"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { exportCsv() }
-                })
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "服务器地址 (高级)"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { showBaseUrlDialog() }
-                })
+                inner.addView(UiKit.cardTitle(ctx, "数据与账号"))
+                inner.addView(UiKit.outlinedButton(ctx, "导出我的数据 (CSV)") { exportCsv() })
+                inner.addView(UiKit.outlinedButton(ctx, "服务器地址 (高级)") { showBaseUrlDialog() })
                 inner.addView(MaterialButton(ctx).apply {
                     text = getString(R.string.logout)
                     cornerRadius = UiKit.dp(ctx, 12)
@@ -186,7 +166,7 @@ class ProfileFragment : Fragment() {
 
     private fun showCoachReview() {
         val loading = AlertDialog.Builder(requireContext())
-            .setTitle("🧠 AI 教练复盘")
+            .setTitle("AI 教练复盘")
             .setMessage("教练正在分析你的训练数据…(约 30 秒)")
             .setCancelable(true)
             .show()
@@ -221,9 +201,21 @@ class ProfileFragment : Fragment() {
         }
         scroll.addView(box)
 
+        // BottomSheet 拖拽指示条 (32x4dp, 圆角, #E0E0E0)
+        box.addView(View(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(UiKit.dp(ctx, 32), UiKit.dp(ctx, 4)).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                bottomMargin = UiKit.dp(ctx, 12)
+            }
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = UiKit.dp(ctx, 2).toFloat()
+                setColor(0xFFE0E0E0.toInt())
+            }
+        })
+
         box.addView(TextView(ctx).apply {
-            text = "🧠 AI 教练复盘"
-            textSize = 22f
+            text = "AI 教练复盘"
+            textSize = 20f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(ctx.getColor(R.color.on_surface))
         })
@@ -231,33 +223,52 @@ class ProfileFragment : Fragment() {
             setPadding(0, 4, 0, UiKit.dp(ctx, 8))
         })
 
-        fun section(title: String, bodyText: String?) {
+        fun section(title: String, bodyText: String?, panel: Boolean = false) {
             if (bodyText.isNullOrBlank()) return
             box.addView(TextView(ctx).apply {
                 text = title
                 textSize = 16f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 setTextColor(ctx.getColor(R.color.on_surface))
-                setPadding(0, UiKit.dp(ctx, 10), 0, 2)
+                setPadding(0, UiKit.dp(ctx, 16), 0, UiKit.dp(ctx, 4))
             })
-            box.addView(UiKit.body(ctx, bodyText))
+            box.addView(UiKit.body(ctx, bodyText).apply {
+                setLineSpacing(0f, 1.2f)
+                if (panel) {
+                    // 浅色底板包裹 (下周建议)
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        cornerRadius = UiKit.dp(ctx, 12).toFloat()
+                        setColor(ctx.getColor(R.color.bg))
+                    }
+                    setPadding(UiKit.dp(ctx, 12), UiKit.dp(ctx, 10),
+                               UiKit.dp(ctx, 12), UiKit.dp(ctx, 10))
+                }
+            })
         }
 
         if (rv != null) {
-            section("📈 趋势", rv.trend)
-            section("⚖️ 动作平衡", rv.balance)
-            section("🎯 弱点", rv.weakness)
-            section("📋 计划执行", rv.adherence)
+            section("趋势", rv.trend)
+            section("动作平衡", rv.balance)
+            section("弱点", rv.weakness)
+            section("计划执行", rv.adherence)
             rv.nextWeek?.takeIf { it.isNotEmpty() }?.let { nw ->
-                section("🗓 下周建议", nw.joinToString("\n") { "• $it" })
+                section("下周建议", nw.joinToString("\n") { "•  $it" }, panel = true)
             }
-            rv.encouragement?.let {
+            rv.encouragement?.let { enc ->
+                // 暗色正文, 仅数字/得分橙色加粗 (SpannableString)
+                val sp = android.text.SpannableString(enc)
+                Regex("\\d+(\\.\\d+)?[分天次个秒]?").findAll(enc).forEach { m ->
+                    sp.setSpan(android.text.style.ForegroundColorSpan(ctx.getColor(R.color.highlight_orange)),
+                        m.range.first, m.range.last + 1, 0)
+                    sp.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                        m.range.first, m.range.last + 1, 0)
+                }
                 box.addView(TextView(ctx).apply {
-                    text = "🔥 $it"
+                    text = sp
                     textSize = 15f
-                    setTypeface(typeface, android.graphics.Typeface.BOLD)
-                    setTextColor(ctx.getColor(R.color.warning))
-                    setPadding(0, UiKit.dp(ctx, 12), 0, 0)
+                    setTextColor(ctx.getColor(R.color.text_dark))
+                    setLineSpacing(0f, 1.2f)
+                    setPadding(0, UiKit.dp(ctx, 16), 0, 0)
                 })
             }
         } else {
@@ -265,7 +276,7 @@ class ProfileFragment : Fragment() {
         }
 
         box.addView(MaterialButton(ctx).apply {
-            text = "收到 💪"
+            text = "收到"
             cornerRadius = UiKit.dp(ctx, 12)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -284,7 +295,7 @@ class ProfileFragment : Fragment() {
             inputType = InputType.TYPE_CLASS_TEXT
         }
         AlertDialog.Builder(requireContext())
-            .setTitle("💬 告诉教练")
+            .setTitle("告诉教练")
             .setMessage("教练会长期记住这条信息, 在复盘/对话/排计划时考虑它")
             .setView(input)
             .setPositiveButton("保存") { _, _ ->

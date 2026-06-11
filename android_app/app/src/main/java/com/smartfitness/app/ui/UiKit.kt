@@ -54,4 +54,17 @@ object UiKit {
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
         setTextColor(ctx.getColor(R.color.on_surface_secondary))
     }
+
+    /** 次级动作: 描边按钮 (透明底 + 主绿描边文字), 避免满屏实心大绿块 */
+    fun outlinedButton(ctx: Context, text: String, onClick: () -> Unit) =
+        com.google.android.material.button.MaterialButton(
+            ctx, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            this.text = text
+            cornerRadius = dp(ctx, 12)
+            setTextColor(ctx.getColor(R.color.primary))
+            strokeColor = android.content.res.ColorStateList.valueOf(ctx.getColor(R.color.primary))
+            setOnClickListener { onClick() }
+        }
 }

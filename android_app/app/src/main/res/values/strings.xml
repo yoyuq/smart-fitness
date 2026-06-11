@@ -15,11 +15,11 @@
     <string name="plans">Plans</string>
     <string name="profile">Profile</string>
 
-    <string name="today_summary">Today\'s Summary</string>
-    <string name="sessions">Sessions</string>
-    <string name="total_reps">Total Reps</string>
-    <string name="total_minutes">Minutes</string>
-    <string name="avg_score">Avg Score</string>
+    <string name="today_summary">今日概览</string>
+    <string name="sessions">训练次数</string>
+    <string name="total_reps">总次数</string>
+    <string name="total_minutes">时长(分)</string>
+    <string name="avg_score">平均评分</string>
     <string name="recent_plans">Recent Plans</string>
     <string name="no_plans">No plans yet</string>
 
@@ -39,8 +39,8 @@
     <string name="refresh">Refresh</string>
     <string name="delete">Delete</string>
 
-    <string name="devices">Devices</string>
-    <string name="no_devices">No devices registered</string>
-    <string name="register_device">Register This Phone</string>
+    <string name="devices">设备</string>
+    <string name="no_devices">暂无已注册设备</string>
+    <string name="register_device">注册这台手机</string>
     <string name="clear">Clear</string>
 </resources>

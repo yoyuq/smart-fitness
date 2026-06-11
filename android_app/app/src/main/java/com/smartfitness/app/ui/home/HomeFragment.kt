@@ -222,28 +222,36 @@ class HomeFragment : Fragment() {
                 val container = plansContainer
                 // Insert at top of plansContainer
                 val title = TextView(ctx)
-                title.text = "🔥 Streak"
-                title.textSize = 14f
-                title.setPadding(24, 16, 24, 8)
+                title.text = "连续训练"
+                title.textSize = 15f
+                title.setTypeface(title.typeface, android.graphics.Typeface.BOLD)
+                title.setTextColor(ctx.getColor(com.smartfitness.app.R.color.on_surface))
+                title.setPadding(24, 24, 24, 8)
                 container.addView(title, 0)
                 val streakTv = TextView(ctx)
-                streakTv.text = "  Current: ${s.currentStreak} days  |  Longest: ${s.longestStreak} days  |  Last active: ${s.lastActive ?: "-"}"
+                streakTv.text = "当前 ${s.currentStreak} 天 · 最长 ${s.longestStreak} 天 · 最近 ${s.lastActive ?: "-"}"
                 streakTv.textSize = 13f
-                streakTv.setPadding(24, 4, 24, 12)
+                streakTv.setTextColor(ctx.getColor(com.smartfitness.app.R.color.on_surface_secondary))
+                streakTv.setPadding(24, 4, 24, 16)
                 container.addView(streakTv, 1)
 
                 val achTitle = TextView(ctx)
                 val unlocked = ach.achievements.count { it.unlocked }
-                achTitle.text = "🏆 Achievements ($unlocked / ${ach.achievements.size})"
-                achTitle.textSize = 14f
+                achTitle.text = "成就 ($unlocked / ${ach.achievements.size})"
+                achTitle.textSize = 15f
+                achTitle.setTypeface(achTitle.typeface, android.graphics.Typeface.BOLD)
+                achTitle.setTextColor(ctx.getColor(com.smartfitness.app.R.color.on_surface))
                 achTitle.setPadding(24, 16, 24, 8)
                 container.addView(achTitle, 2)
                 ach.achievements.forEach { a ->
                     val tv = TextView(ctx)
-                    val mark = if (a.unlocked) "✅" else "⬜"
-                    tv.text = "  $mark ${a.name} - ${a.desc}"
-                    tv.textSize = 12f
-                    tv.setPadding(24, 2, 24, 2)
+                    val mark = if (a.unlocked) "✓" else "·"
+                    tv.text = " $mark  ${a.name} - ${a.desc}"
+                    tv.textSize = 13f
+                    tv.setTextColor(ctx.getColor(
+                        if (a.unlocked) com.smartfitness.app.R.color.primary_dark
+                        else com.smartfitness.app.R.color.on_surface_secondary))
+                    tv.setPadding(24, 10, 24, 10)
                     container.addView(tv, 3 + ach.achievements.indexOf(a))
                 }
             } catch (e: Exception) {
