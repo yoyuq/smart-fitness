@@ -285,3 +285,139 @@ if __name__ == "__main__":
         res = eng.infer_from_landmarks(arr[15])
         ok = "✅" if res.get("exercise") == label else "❌"
         print(f"  {ok} truth={label:14s} pred={res.get('exercise'):14s} conf={res.get('confidence',0):.2f} score={res.get('form_score','-')} fb={res.get('feedback','-')[:40]}")
+
+
+# ============================================================
+# YOLO26 后端 (评分V2 第二阶段)
+# 实测本机 CPU: yolo26n-pose 109ms/帧, yolo26m-pose 480ms/帧;
+# 原生多人检测, 主体锁定 = bbox 面积 × 画面中心接近度.
+# ============================================================
+
+# COCO-17 → MediaPipe-33 槽位映射 (未覆盖槽位 visibility=0)
+COCO_TO_MP = {
+    0: 0,    # nose
+    1: 2, 2: 5,      # eyes
+    3: 7, 4: 8,      # ears
+    5: 11, 6: 12,    # shoulders
+    7: 13, 8: 14,    # elbows
+    9: 15, 10: 16,   # wrists
+    11: 23, 12: 24,  # hips
+    13: 25, 14: 26,  # knees
+    15: 27, 16: 28,  # ankles
+}
+
+
+def _classify_and_score(arr, angles, out, clf, labels):
+    """共用尾段: 有效性门禁 → 分类 → 规则评分. (MediaPipe/YOLO 两后端一致)"""
+    valid, quality = check_pose_validity(arr[:, 3], None)
+    out["pose_valid"] = bool(valid)
+    out["vis_quality"] = round(quality, 2)
+    if clf is None:
+        return out
+    feats, _ = make_features_single(arr)
+    probs = clf.predict_proba(feats)[0]
+    top_id = int(np.argmax(probs))
+    exercise = labels[top_id]
+    out["exercise"] = exercise
+    out["confidence"] = float(probs[top_id])
+    out["all_probs"] = {labels[i]: float(p) for i, p in enumerate(probs)}
+    valid, quality = check_pose_validity(arr[:, 3], exercise)
+    out["pose_valid"] = bool(valid)
+    out["vis_quality"] = round(quality, 2)
+    rule = FORM_RULES.get(exercise)
+    if rule:
+        score, fb = rule(angles)
+        score, fb = apply_score_gate(int(score), fb, valid, quality)
+        out["form_score"] = score
+        out["feedback"] = fb
+    return out
+
+
+class PoseEngineYolo26:
+    """YOLO26-pose 后端: 多人检测 + 主体锁定, 输出契约与 PoseEngine 完全一致.
+
+    额外字段: persons (本帧人数), backend ("yolo26").
+    注意: 动作分类器是用 MediaPipe 33 点合成数据训的, COCO 升格后
+    16 个槽位为零值, 分类置信度会偏低 — 训练流程以用户选择的目标动作
+    为准 (route 的 exercise_hint), 不受影响.
+    """
+
+    def __init__(self, model_name=None, classifier_path=CLASSIFIER_PATH):
+        from ultralytics import YOLO
+        self.model_name = model_name or os.environ.get("POSE_YOLO_MODEL", "yolo26n-pose.pt")
+        self.model = YOLO(self.model_name)
+        self.clf = None
+        self.labels = None
+        if os.path.exists(classifier_path):
+            with open(classifier_path, "rb") as f:
+                pkg = pickle.load(f)
+            self.clf = pkg["model"]
+            self.labels = pkg["labels"]
+        log.info(f"PoseEngineYolo26 ready: {self.model_name}, classifier={'yes' if self.clf else 'no'}")
+
+    @staticmethod
+    def _pick_primary(boxes_xyxy, w, h):
+        """主体锁定: 面积 × 中心接近度加权, 选'正在锻炼的那个人'."""
+        best_i, best_score = 0, -1.0
+        cx0, cy0 = w / 2.0, h / 2.0
+        for i, (x1, y1, x2, y2) in enumerate(boxes_xyxy):
+            area = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1)) / (w * h + 1e-6)
+            bx, by = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            dist = ((bx - cx0) ** 2 + (by - cy0) ** 2) ** 0.5 / ((w ** 2 + h ** 2) ** 0.5 / 2)
+            score = area * (1.0 - 0.5 * dist)
+            if score > best_score:
+                best_score, best_i = score, i
+        return best_i
+
+    def infer_from_image(self, image_bgr):
+        t0 = time.time()
+        h, w = image_bgr.shape[:2]
+        res = self.model.predict(image_bgr, imgsz=640, verbose=False)[0]
+        n = 0 if res.boxes is None else len(res.boxes)
+        if n == 0 or res.keypoints is None:
+            return {"detected": False, "persons": 0, "backend": "yolo26",
+                    "infer_ms": int((time.time() - t0) * 1000)}
+
+        idx = self._pick_primary(res.boxes.xyxy.cpu().numpy(), w, h)
+        kxy = res.keypoints.xyn[idx].cpu().numpy()          # (17,2) 归一化
+        if res.keypoints.conf is not None:
+            kconf = res.keypoints.conf[idx].cpu().numpy()   # (17,)
+        else:
+            kconf = np.ones(17, dtype=np.float32)
+
+        arr = np.zeros((33, 4), dtype=np.float32)
+        for coco_i, mp_i in COCO_TO_MP.items():
+            arr[mp_i, 0] = kxy[coco_i, 0]
+            arr[mp_i, 1] = kxy[coco_i, 1]
+            arr[mp_i, 2] = 0.0
+            arr[mp_i, 3] = kconf[coco_i]
+
+        _, angles = make_features_single(arr)
+        out = {
+            "detected": True,
+            "persons": int(n),
+            "backend": "yolo26",
+            "landmarks": [{"x": float(arr[i, 0]), "y": float(arr[i, 1]),
+                           "z": 0.0, "v": float(arr[i, 3])} for i in range(33)],
+            "angles": {k: round(v, 1) for k, v in angles.items()},
+            "infer_ms": int((time.time() - t0) * 1000),
+        }
+        return _classify_and_score(arr, angles, out, self.clf, self.labels)
+
+    def infer_from_landmarks(self, landmarks_33x4):
+        arr = np.asarray(landmarks_33x4, dtype=np.float32).reshape(33, 4)
+        _, angles = make_features_single(arr)
+        out = {"detected": True, "backend": "yolo26",
+               "angles": {k: round(v, 1) for k, v in angles.items()}}
+        return _classify_and_score(arr, angles, out, self.clf, self.labels)
+
+
+def create_engine(backend=None):
+    """工厂: POSE_BACKEND=yolo26|mediapipe (默认 yolo26, 失败回退 MediaPipe)."""
+    backend = (backend or os.environ.get("POSE_BACKEND", "yolo26")).lower()
+    if backend in ("yolo26", "yolo"):
+        try:
+            return PoseEngineYolo26()
+        except Exception as e:
+            log.warning(f"yolo26 backend init failed ({e}), falling back to mediapipe")
+    return PoseEngine()

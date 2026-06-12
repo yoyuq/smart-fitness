@@ -64,14 +64,15 @@ def _get_detector(device_id: str, target_exercise: Optional[str] = None) -> Opti
 try:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ml_pose"))
-    from pose_engine import PoseEngine
-    _pose_engine: Optional[PoseEngine] = None
-    def get_pose_engine() -> Optional[PoseEngine]:
+    from pose_engine import PoseEngine, create_engine
+    _pose_engine: Optional[Any] = None
+    def get_pose_engine() -> Optional[Any]:
         global _pose_engine
         if _pose_engine is None:
             try:
-                _pose_engine = PoseEngine()
-                log.info("pose_engine ready")
+                # POSE_BACKEND=yolo26 (默认) | mediapipe; yolo26 失败自动回退
+                _pose_engine = create_engine()
+                log.info(f"pose_engine ready: {type(_pose_engine).__name__}")
             except Exception as e:
                 log.warning(f"pose_engine init failed: {e}")
                 _pose_engine = None

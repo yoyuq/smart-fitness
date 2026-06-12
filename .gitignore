@@ -123,3 +123,6 @@ stop.sh
 
 # PoC outputs
 ml_pose/poc_out/
+
+# YOLO weights (auto-downloaded)
+yolo26*.pt
