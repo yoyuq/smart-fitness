@@ -9,4 +9,9 @@
         <item name="colorOnSurface">@color/on_surface</item>
         <item name="android:statusBarColor" tools:targetApi="l">@color/primary_dark</item>
     </style>
+
+    <!-- 底栏去掉 M3 选中药丸, 纯色高亮 (Gemini 三轮评审) -->
+    <style name="App.NavIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@android:color/transparent</item>
+    </style>
 </resources>

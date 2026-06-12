@@ -65,9 +65,25 @@ class HomeFragment : Fragment() {
                 val stats = ApiClient.service.statsDaily()
                 stats.stats?.let { s ->
                     sessionsView.text = s.sessionsCount.toString()
-                    repsView.text = s.totalReps.toString()
                     minutesView.text = String.format("%.1f", s.totalMinutes)
                     scoreView.text = String.format("%.1f", s.avgScore)
+                    // 空状态情感化: 不给新用户看一个冰冷的巨大 0
+                    val unit = view?.findViewById<TextView>(R.id.stat_reps_unit)
+                    val sub = view?.findViewById<TextView>(R.id.hero_sub)
+                    val banner = view?.findViewById<TextView>(R.id.banner_newbie)
+                    if (s.totalReps <= 0) {
+                        repsView.text = "GO!"
+                        repsView.setTextColor(requireContext().getColor(R.color.primary))
+                        unit?.visibility = View.GONE
+                        sub?.visibility = View.VISIBLE
+                        banner?.visibility = View.VISIBLE
+                    } else {
+                        repsView.text = s.totalReps.toString()
+                        repsView.setTextColor(requireContext().getColor(R.color.on_surface))
+                        unit?.visibility = View.VISIBLE
+                        sub?.visibility = View.GONE
+                        banner?.visibility = View.GONE
+                    }
                 }
 
                 val plans = ApiClient.service.listPlans().plans
@@ -200,9 +216,9 @@ class HomeFragment : Fragment() {
                             setMargins(gap, gap, gap, gap)
                         }
                         cell.layoutParams = lp
-                        // Keep 绿色阶
+                        // Keep 绿色阶 (未激活用极淡灰, 避免荒漠感)
                         val color = when {
-                            reps == 0 -> 0xFFF0F0F2.toInt()
+                            reps == 0 -> 0xFFF5F5F8.toInt()
                             reps < 10 -> 0xFFB8EFD9.toInt()
                             reps < 30 -> 0xFF6FDDB0.toInt()
                             reps < 60 -> 0xFF24C789.toInt()
@@ -216,7 +232,7 @@ class HomeFragment : Fragment() {
                         cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
                     }
                 }
-                sum.text = "近 12 周活跃 $activeDays 天 · 累计 $totalReps 次"
+                sum.text = "近 12 周活跃 $activeDays 天 · 累计 $totalReps 次\n💡 连续打卡 3 天点亮你的健康周报"
             } catch (e: Exception) {
                 sum.text = "Calendar load failed: ${e.message}"
             }
@@ -247,7 +263,7 @@ class HomeFragment : Fragment() {
 
                 val achTitle = TextView(ctx)
                 val unlocked = ach.achievements.count { it.unlocked }
-                achTitle.text = "成就 ($unlocked / ${ach.achievements.size})"
+                achTitle.text = "成就 · $unlocked/${ach.achievements.size}"
                 achTitle.textSize = 15f
                 achTitle.setTypeface(achTitle.typeface, android.graphics.Typeface.BOLD)
                 achTitle.setTextColor(ctx.getColor(com.smartfitness.app.R.color.on_surface))

@@ -18,7 +18,7 @@
     <string name="today_summary">今日概览</string>
     <string name="sessions">训练次数</string>
     <string name="total_reps">总次数</string>
-    <string name="total_minutes">时长(分)</string>
+    <string name="total_minutes">时长·分钟</string>
     <string name="avg_score">平均评分</string>
     <string name="recent_plans">Recent Plans</string>
     <string name="no_plans">No plans yet</string>

@@ -12,20 +12,29 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.smartfitness.app.R
 import com.smartfitness.app.api.ApiClient
 import com.smartfitness.app.app.PlanIntent
 import com.smartfitness.app.model.CreatePlanRequest
 import com.smartfitness.app.model.WorkoutPlan
+import com.smartfitness.app.ui.UiKit
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
+/**
+ * 计划页 v2 (Keep 风格, Gemini 三轮评审方案):
+ * 砍掉 JSON 输入框; AI 生成为超级主按钮; 创建空白计划为次级动作;
+ * 列表卡片化(名称+动作数+开始胶囊); 下拉刷新替代 Refresh 按钮.
+ */
 class PlansFragment : Fragment() {
 
-    private lateinit var nameInput: EditText
-    private lateinit var exercisesInput: EditText
+    private lateinit var nameInput: TextInputEditText
     private lateinit var plansContainer: LinearLayout
+    private lateinit var swipe: SwipeRefreshLayout
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -33,55 +42,90 @@ class PlansFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         val ctx = inflater.context
-        return LinearLayout(ctx).apply {
+        val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 48, 48, 48)
+            setPadding(UiKit.dp(ctx, 16), UiKit.dp(ctx, 16), UiKit.dp(ctx, 16), UiKit.dp(ctx, 16))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
+        }
+
+        with(root) {
+            addView(TextView(ctx).apply {
+                text = "训练计划"
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(ctx.getColor(R.color.on_surface))
+                setPadding(UiKit.dp(ctx, 4), UiKit.dp(ctx, 8), 0, UiKit.dp(ctx, 16))
+            })
+
+            // 新建计划卡片
+            UiKit.card(ctx).let { (cardView, inner) ->
+                val til = TextInputLayout(
+                    ctx, null,
+                    com.google.android.material.R.attr.textInputOutlinedStyle
+                ).apply {
+                    hint = "给计划起个名字（如：夏日燃脂）"
+                    boxStrokeColor = ctx.getColor(R.color.primary)
+                    setBoxCornerRadii(
+                        UiKit.dp(ctx, 12).toFloat(), UiKit.dp(ctx, 12).toFloat(),
+                        UiKit.dp(ctx, 12).toFloat(), UiKit.dp(ctx, 12).toFloat()
+                    )
+                }
+                nameInput = TextInputEditText(til.context).apply {
+                    inputType = InputType.TYPE_CLASS_TEXT
+                    textSize = 15f
+                }
+                til.addView(nameInput)
+                inner.addView(til)
+
+                inner.addView(TextView(ctx).apply {
+                    text = "AI 会结合你的目标、身体数据和训练历史生成动作列表"
+                    textSize = 13f
+                    setTextColor(ctx.getColor(R.color.on_surface_secondary))
+                    setPadding(UiKit.dp(ctx, 4), UiKit.dp(ctx, 8), 0, UiKit.dp(ctx, 4))
+                })
+
+                inner.addView(MaterialButton(ctx).apply {
+                    text = "✨ AI 生成计划"
+                    textSize = 16f
+                    cornerRadius = UiKit.dp(ctx, 24)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, UiKit.dp(ctx, 48)
+                    ).apply { topMargin = UiKit.dp(ctx, 8) }
+                    setOnClickListener { showAiGenerateDialog() }
+                })
+
+                inner.addView(UiKit.outlinedButton(ctx, "创建空白计划") { createPlan() }.apply {
+                    cornerRadius = UiKit.dp(ctx, 24)
+                })
+                addView(cardView)
+            }
 
             addView(TextView(ctx).apply {
-                text = getString(R.string.add_plan)
-                textSize = 20f
-                setPadding(0, 0, 0, 16)
-            })
-
-            nameInput = EditText(ctx).apply {
-                hint = "Plan name"
-                inputType = InputType.TYPE_CLASS_TEXT
-            }.also { addView(it) }
-
-            exercisesInput = EditText(ctx).apply {
-                hint = "Exercises JSON (e.g. [{\"type\":\"squat\",\"reps\":10}])"
-                inputType = InputType.TYPE_CLASS_TEXT
-            }.also { addView(it) }
-
-            addView(MaterialButton(ctx).apply {
-                text = getString(R.string.create)
-                setOnClickListener { createPlan() }
-            })
-
-            addView(MaterialButton(ctx).apply {
-                text = "✨ AI Generate Plan"
-                setOnClickListener { showAiGenerateDialog() }
-            })
-
-            addView(MaterialButton(ctx).apply {
-                text = getString(R.string.refresh)
-                setOnClickListener { loadPlans() }
-            })
-
-            addView(TextView(ctx).apply {
-                text = getString(R.string.my_plans)
-                textSize = 20f
-                setPadding(0, 32, 0, 16)
+                text = "我的计划"
+                textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(ctx.getColor(R.color.on_surface))
+                setPadding(UiKit.dp(ctx, 4), UiKit.dp(ctx, 12), 0, UiKit.dp(ctx, 8))
             })
 
             plansContainer = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
             }.also { addView(it) }
         }
+
+        val scroll = android.widget.ScrollView(ctx).apply {
+            setBackgroundColor(ctx.getColor(R.color.bg))
+            addView(root)
+        }
+        swipe = SwipeRefreshLayout(ctx).apply {
+            setColorSchemeColors(ctx.getColor(R.color.primary))
+            setOnRefreshListener { loadPlans() }
+            addView(scroll)
+        }
+        return swipe
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -90,78 +134,114 @@ class PlansFragment : Fragment() {
 
     private fun createPlan() {
         val name = nameInput.text?.toString()?.trim().orEmpty()
-        val ex = exercisesInput.text?.toString()?.trim().orEmpty().ifEmpty { "[]" }
         if (name.isEmpty()) {
-            Toast.makeText(requireContext(), "Name required", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "先给计划起个名字", Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
             try {
-                val resp = ApiClient.service.createPlan(CreatePlanRequest(name, ex))
+                val resp = ApiClient.service.createPlan(CreatePlanRequest(name, "[]"))
                 if (resp.ok) {
-                    Toast.makeText(requireContext(), "Plan created: ${resp.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "已创建: ${resp.name}", Toast.LENGTH_SHORT).show()
                     nameInput.setText("")
-                    exercisesInput.setText("")
                     loadPlans()
                 } else {
-                    Toast.makeText(requireContext(), resp.message ?: "Create failed", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), resp.message ?: "创建失败", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "错误: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun loadPlans() {
+        swipe.isRefreshing = true
         lifecycleScope.launch {
             try {
                 val list = ApiClient.service.listPlans().plans
+                if (!isAdded) return@launch
                 plansContainer.removeAllViews()
+                val ctx = requireContext()
                 if (list.isEmpty()) {
-                    plansContainer.addView(TextView(requireContext()).apply {
-                        text = getString(R.string.no_plans)
+                    plansContainer.addView(TextView(ctx).apply {
+                        text = "还没有计划, 用上面的 AI 一键生成一份吧"
+                        textSize = 14f
+                        setTextColor(ctx.getColor(R.color.on_surface_tertiary))
+                        setPadding(UiKit.dp(ctx, 4), UiKit.dp(ctx, 8), 0, UiKit.dp(ctx, 8))
                     })
                 } else {
-                    list.forEach { plan ->
-                        val ctx = requireContext()
-                        val row = LinearLayout(ctx).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                            setPadding(0, 16, 0, 16)
-                        }
-                        row.addView(TextView(ctx).apply {
-                            text = plan.name
-                            textSize = 16f
-                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                        })
-                        // 一键开始训练
-                        row.addView(MaterialButton(ctx).apply {
-                            text = "开始训练"
-                            setOnClickListener { startTrainingWithPlan(plan) }
-                        })
-                        row.addView(MaterialButton(ctx).apply {
-                            text = getString(R.string.delete)
-                            setOnClickListener {
-                                lifecycleScope.launch {
-                                    try {
-                                        ApiClient.service.deletePlan(plan.planId)
-                                        Toast.makeText(ctx, "Deleted", Toast.LENGTH_SHORT).show()
-                                        loadPlans()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(ctx, "Delete failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        })
-                        plansContainer.addView(row)
-                    }
+                    list.forEach { plan -> plansContainer.addView(buildPlanCard(plan)) }
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Load failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                if (isAdded) Toast.makeText(requireContext(), "加载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                swipe.isRefreshing = false
             }
         }
     }
 
-    private fun startTrainingWithPlan(plan: com.smartfitness.app.model.WorkoutPlan) {
+    private fun buildPlanCard(plan: WorkoutPlan): View {
+        val ctx = requireContext()
+        val (cardView, inner) = UiKit.card(ctx)
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val itemCount = try { JSONArray(plan.exercises ?: "[]").length() } catch (_: Exception) { 0 }
+
+        val textCol = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        textCol.addView(TextView(ctx).apply {
+            text = plan.name
+            textSize = 16f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(ctx.getColor(R.color.on_surface))
+        })
+        textCol.addView(TextView(ctx).apply {
+            text = "$itemCount 个动作"
+            textSize = 12f
+            setTextColor(ctx.getColor(R.color.on_surface_tertiary))
+            setPadding(0, UiKit.dp(ctx, 2), 0, 0)
+        })
+        row.addView(textCol)
+
+        row.addView(MaterialButton(ctx).apply {
+            text = "开始"
+            textSize = 13f
+            cornerRadius = UiKit.dp(ctx, 18)
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(UiKit.dp(ctx, 20), 0, UiKit.dp(ctx, 20), 0)
+            setOnClickListener { startTrainingWithPlan(plan) }
+        })
+
+        row.addView(MaterialButton(
+            ctx, null,
+            com.google.android.material.R.attr.borderlessButtonStyle
+        ).apply {
+            text = "删除"
+            textSize = 13f
+            setTextColor(ctx.getColor(R.color.on_surface_tertiary))
+            minWidth = 0
+            minimumWidth = 0
+            setOnClickListener {
+                lifecycleScope.launch {
+                    try {
+                        ApiClient.service.deletePlan(plan.planId)
+                        loadPlans()
+                    } catch (e: Exception) {
+                        Toast.makeText(ctx, "删除失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        })
+        inner.addView(row)
+        return cardView
+    }
+
+    private fun startTrainingWithPlan(plan: WorkoutPlan) {
         var exType: String? = null
         var exReps: Int? = null
         try {
@@ -187,33 +267,33 @@ class PlansFragment : Fragment() {
             setPadding(48, 24, 48, 0)
         }
         val goalInput = EditText(ctx).apply {
-            hint = "Goal (e.g. fat-loss / strength / cardio)"
-            setText("strength")
+            hint = "目标 (如: 减脂 / 增肌 / 体能)"
+            setText("增肌")
         }
         val weeksInput = EditText(ctx).apply {
-            hint = "Weeks (1-8)"
+            hint = "周数 (1-8)"
             inputType = InputType.TYPE_CLASS_NUMBER
             setText("2")
         }
         container.addView(goalInput)
         container.addView(weeksInput)
         com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
-            .setTitle("✨ AI Generate Plan")
-            .setMessage("LLM 会生成 N 周训练计划. 需 30-60 秒.")
+            .setTitle("✨ AI 生成计划")
+            .setMessage("AI 教练会结合你的数据生成渐进式计划, 约 30-60 秒")
             .setView(container)
-            .setPositiveButton("Generate") { _, _ ->
-                val goal = goalInput.text.toString().trim().ifEmpty { "strength" }
+            .setPositiveButton("生成") { _, _ ->
+                val goal = goalInput.text.toString().trim().ifEmpty { "增肌" }
                 val weeks = (weeksInput.text.toString().toIntOrNull() ?: 2).coerceIn(1, 8)
                 doAiGenerate(goal, weeks)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("取消", null)
             .show()
     }
 
     private fun doAiGenerate(goal: String, weeks: Int) {
         val ctx = requireContext()
         val progress = android.app.ProgressDialog(ctx).apply {
-            setMessage("LLM is generating... (~30s)")
+            setMessage("AI 教练正在生成计划… (~30 秒)")
             setCancelable(false)
             show()
         }
@@ -224,25 +304,22 @@ class PlansFragment : Fragment() {
                 )
                 progress.dismiss()
                 if (resp.ok && resp.plans.isNotEmpty()) {
-                    // 把生成的计划全部写成一个 Plan 存起来
-                    val name = "AI $goal x$weeks weeks"
+                    val name = "AI·$goal ${weeks}周"
                     val exercises = resp.plans.joinToString(",", prefix = "[", postfix = "]") {
-                        """{"type":"${it.exerciseType}","sets":${it.targetSets},"reps":${it.targetReps},"note":"${it.intensityNote ?: ""}"}"""
+                        """{"type":"${it.exerciseType}","sets":${it.targetSets},"reps":${it.targetReps},"note":"${(it.intensityNote ?: "").replace("\"", "")}"}"""
                     }
                     ApiClient.service.createPlan(
                         com.smartfitness.app.model.CreatePlanRequest(name, exercises)
                     )
-                    Toast.makeText(ctx, "AI plan created: ${resp.plans.size} days", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, "AI 计划已生成: ${resp.plans.size} 项", Toast.LENGTH_LONG).show()
                     loadPlans()
                 } else {
-                    Toast.makeText(ctx, "AI generate failed: ${resp.message ?: ""}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, "生成失败: ${resp.message ?: ""}", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 progress.dismiss()
-                Toast.makeText(ctx, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, "错误: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
-
 }
-

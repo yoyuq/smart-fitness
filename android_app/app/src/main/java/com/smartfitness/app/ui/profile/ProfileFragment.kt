@@ -88,7 +88,6 @@ class ProfileFragment : Fragment() {
                 devicesContainer = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
                 }.also { inner.addView(it) }
-                inner.addView(UiKit.outlinedButton(ctx, getString(R.string.register_device)) { registerDevice() })
                 inner.addView(UiKit.caption(ctx, "ESP32 绑定").apply {
                     setPadding(0, UiKit.dp(ctx, 8), 0, 0)
                 })
@@ -103,13 +102,14 @@ class ProfileFragment : Fragment() {
                 addView(cardView)
             }
 
-            // 目标卡片
+            // 目标卡片 (整卡可点, 不再塞按钮)
             UiKit.card(ctx).let { (cardView, inner) ->
                 inner.addView(UiKit.cardTitle(ctx, "我的目标"))
-                goalsView = UiKit.body(ctx, "暂无目标, 立即设置").apply {
+                goalsView = UiKit.body(ctx, "暂无目标 · 点击设置 →").apply {
                     setTextColor(ctx.getColor(R.color.hint))
                 }.also { inner.addView(it) }
-                inner.addView(UiKit.outlinedButton(ctx, "设置目标") { showGoalsDialog() })
+                cardView.isClickable = true
+                cardView.setOnClickListener { showGoalsDialog() }
                 addView(cardView)
             }
 

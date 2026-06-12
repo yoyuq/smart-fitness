@@ -20,7 +20,7 @@ object UiKit {
     fun card(ctx: Context): Pair<MaterialCardView, LinearLayout> {
         val inner = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16))
+            setPadding(dp(ctx, 20), dp(ctx, 20), dp(ctx, 20), dp(ctx, 20))
         }
         val cardView = MaterialCardView(ctx).apply {
             // Keep 风格: 扁平白卡 + 细描边, 不用阴影
