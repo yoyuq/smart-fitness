@@ -126,3 +126,6 @@ ml_pose/poc_out/
 
 # YOLO weights (auto-downloaded)
 yolo26*.pt
+
+# rep ¹Ø¼üÖ¡ (ÑµÁ·²úÉú)
+backend/data/rep_frames/

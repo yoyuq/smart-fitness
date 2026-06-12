@@ -38,6 +38,49 @@ except Exception as _e:
     _detectors = {}
 
 
+# ============================================================
+# 评分V2 第三阶段: 帧环形缓冲 (rep 完成时回捞起始/最深/结束三关键帧给 AI 评审团)
+# ============================================================
+from collections import deque as _deque
+_frame_buffers: Dict[str, Any] = {}
+REP_FRAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "rep_frames")
+
+
+def _buffer_frame(device_id: str, ts: float, jpg_bytes: bytes, maxlen: int = 60):
+    buf = _frame_buffers.get(device_id)
+    if buf is None:
+        buf = _deque(maxlen=maxlen)
+        _frame_buffers[device_id] = buf
+    buf.append((ts, jpg_bytes))
+
+
+def _save_rep_keyframes(device_id: str, session_id: str, rep: Dict) -> Dict[str, Optional[str]]:
+    """按 rep 的 start/peak/end 时间戳从缓冲取最近帧落盘, 返回相对路径."""
+    out = {"start_frame": None, "peak_frame": None, "end_frame": None}
+    buf = _frame_buffers.get(device_id)
+    if not buf:
+        return out
+    frames = list(buf)
+    sess_dir = os.path.join(REP_FRAME_DIR, session_id or "nosession")
+    os.makedirs(sess_dir, exist_ok=True)
+    for key, ts_key in (("start_frame", "start_ts"), ("peak_frame", "peak_ts"), ("end_frame", "end_ts")):
+        target = rep.get(ts_key)
+        if target is None:
+            continue
+        nearest = min(frames, key=lambda f: abs(f[0] - target))
+        if abs(nearest[0] - target) > 3.0:   # 缓冲里没有足够近的帧
+            continue
+        fname = f"rep{rep['rep_index']:03d}_{key.split('_')[0]}.jpg"
+        fpath = os.path.join(sess_dir, fname)
+        try:
+            with open(fpath, "wb") as f:
+                f.write(nearest[1])
+            out[key] = os.path.relpath(fpath, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            log.warning(f"rep keyframe save failed: {e}")
+    return out
+
+
 def _get_detector(device_id: str, target_exercise: Optional[str] = None) -> Optional[Any]:
     """Return (and optionally configure) the ExerciseDetector for a device.
     Only resets rep_count when the target exercise *changes*, not on every call."""
@@ -367,6 +410,8 @@ async def v2_vision_infer_full(req: Request):
             arr = np.frombuffer(raw, dtype=np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             img_for_broadcast = img
+            if not paused:
+                _buffer_frame(device_id or "default", time.time(), raw)
             eng = get_pose_engine()
             if eng is not None and img is not None:
                 res = eng.infer_from_image(img)
@@ -424,16 +469,20 @@ async def v2_vision_infer_full(req: Request):
                                 feedback = completed_rep["feedback"]
                                 if session_id:
                                     try:
+                                        # 第三阶段: 留存起始/最深/结束关键帧供 AI 评审团夜间批审
+                                        kf = _save_rep_keyframes(device_id or "default", session_id, completed_rep)
                                         conn_r = get_db()
                                         _rs.ensure_table(conn_r)
                                         conn_r.execute(
                                             "INSERT INTO rep_scores (session_id, rep_index, exercise, depth, control, "
-                                            "symmetry, total, peak_angle, duration_s, feedback, ts) "
-                                            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                            "symmetry, total, peak_angle, duration_s, feedback, ts, "
+                                            "start_frame, peak_frame, end_frame) "
+                                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                             (session_id, completed_rep["rep_index"], completed_rep["exercise"],
                                              completed_rep["depth"], completed_rep["control"], completed_rep["symmetry"],
                                              completed_rep["total"], completed_rep["peak_angle"],
-                                             completed_rep["duration_s"], completed_rep["feedback"], completed_rep["ts"]))
+                                             completed_rep["duration_s"], completed_rep["feedback"], completed_rep["ts"],
+                                             kf["start_frame"], kf["peak_frame"], kf["end_frame"]))
                                         conn_r.commit()
                                         conn_r.close()
                                     except Exception as e:

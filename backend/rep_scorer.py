@@ -129,7 +129,11 @@ class RepScorer:
             return None
 
         primaries = [f["primary"] for f in frames]
-        extremum = min(primaries) if cfg["extremum"] == "min" else max(primaries)
+        if cfg["extremum"] == "min":
+            peak_i = min(range(len(primaries)), key=lambda i: primaries[i])
+        else:
+            peak_i = max(range(len(primaries)), key=lambda i: primaries[i])
+        extremum = primaries[peak_i]
         duration = frames[-1]["ts"] - frames[0]["ts"]
         diffs = [f["lr_diff"] for f in frames if f["lr_diff"] is not None]
         mean_diff = (sum(diffs) / len(diffs)) if diffs else 0.0
@@ -169,6 +173,10 @@ class RepScorer:
             "duration_s": round(duration, 2),
             "feedback": "; ".join(fb) if fb else "漂亮, 标准动作!",
             "ts": frames[-1]["ts"],
+            # AI 评审团取帧用: 动作起始/最深点/结束的时间戳
+            "start_ts": frames[0]["ts"],
+            "peak_ts": frames[peak_i]["ts"],
+            "end_ts": frames[-1]["ts"],
         }
         self.rep_scores.append(rep)
         self.last_rep = rep
@@ -202,6 +210,13 @@ def ensure_table(conn):
             depth REAL, control REAL, symmetry REAL, total REAL,
             peak_angle REAL, duration_s REAL,
             feedback TEXT,
-            ts REAL
+            ts REAL,
+            start_frame TEXT, peak_frame TEXT, end_frame TEXT
         )""")
+    # 老库迁移: 补关键帧路径列
+    for col in ("start_frame", "peak_frame", "end_frame"):
+        try:
+            conn.execute(f"ALTER TABLE rep_scores ADD COLUMN {col} TEXT")
+        except Exception:
+            pass
     conn.commit()
