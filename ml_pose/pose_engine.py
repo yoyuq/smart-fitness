@@ -133,6 +133,58 @@ FORM_RULES = {
     "bicep_curl": _score_bicep_curl, "shoulder_press": _score_shoulder_press,
 }
 
+# ============ 人体有效性门禁 ============
+# MediaPipe 对只拍到脸/半身的画面也会"幻觉"出全部 33 个关节点(可见度很低),
+# 用幻觉坐标算角度 → 扣分制规则不触发 → 满分。必须先校验关键关节可见度。
+
+# 各动作评分所必需的关节 (MediaPipe id)
+REQUIRED_VISIBLE = {
+    "squat":          [23, 24, 25, 26, 27, 28],          # 髋/膝/踝
+    "lunge":          [23, 24, 25, 26, 27, 28],
+    "jumping_jack":   [11, 12, 13, 14, 23, 24],          # 肩/肘/髋
+    "push_up":        [11, 12, 13, 14, 15, 16, 23, 24],  # 肩/肘/腕/髋
+    "plank":          [11, 12, 23, 24, 25, 26],
+    "bicep_curl":     [11, 12, 13, 14, 15, 16],
+    "shoulder_press": [11, 12, 13, 14, 15, 16],
+}
+CORE_IDS = [11, 12, 23, 24]   # 双肩 + 双髋: 任何动作都必须看到躯干
+MIN_VIS = 0.5
+LOW_QUALITY = 0.7             # 可见度均值低于此值时分数封顶
+LOW_QUALITY_CAP = 80
+INVALID_FEEDBACK = "未检测到完整人体, 请让身体进入画面"
+
+
+def check_pose_validity(vis_33, exercise=None):
+    """根据关节可见度判断该帧能否用于评分/计数.
+
+    Args:
+        vis_33: 长度 33 的可见度数组 (0-1).
+        exercise: 动作名; 未知动作只校验躯干核心关节.
+    Returns:
+        (valid: bool, quality: float)  quality = 必需关节可见度均值
+    """
+    vis = np.asarray(vis_33, dtype=np.float32)
+    if vis.shape[0] < 33:
+        return False, 0.0
+    core_ok = float(vis[CORE_IDS].mean()) >= MIN_VIS
+    req = REQUIRED_VISIBLE.get(exercise or "", CORE_IDS)
+    visible = int(sum(1 for i in req if vis[i] >= MIN_VIS))
+    req_ok = visible >= max(1, int(len(req) * 0.7))
+    quality = float(np.mean([vis[i] for i in req]))
+    return (core_ok and req_ok), quality
+
+
+def apply_score_gate(score, feedback, valid, quality):
+    """门禁后处理: 无效帧不给分; 低可见度封顶."""
+    if not valid:
+        return None, INVALID_FEEDBACK
+    if quality < LOW_QUALITY and score is not None:
+        capped = min(int(score), LOW_QUALITY_CAP)
+        if capped < score:
+            feedback = (feedback + "; " if feedback and feedback != "标准!" else "") + "部分关节可见度低"
+        return capped, feedback
+    return score, feedback
+
 
 class PoseEngine:
     def __init__(self, classifier_path=CLASSIFIER_PATH, landmarker_path=LANDMARKER_PATH):
@@ -170,6 +222,9 @@ class PoseEngine:
             "angles": {k: round(v, 1) for k, v in angles.items()},
             "infer_ms": int((time.time()-t0)*1000),
         }
+        valid, quality = check_pose_validity(arr[:, 3], None)
+        out["pose_valid"] = bool(valid)
+        out["vis_quality"] = round(quality, 2)
         if self.clf is not None:
             probs = self.clf.predict_proba(feats)[0]
             top_id = int(np.argmax(probs))
@@ -177,10 +232,15 @@ class PoseEngine:
             out["exercise"] = exercise
             out["confidence"] = float(probs[top_id])
             out["all_probs"] = {self.labels[i]: float(p) for i, p in enumerate(probs)}
+            # 针对识别出的动作重算有效性 (不同动作必需关节不同)
+            valid, quality = check_pose_validity(arr[:, 3], exercise)
+            out["pose_valid"] = bool(valid)
+            out["vis_quality"] = round(quality, 2)
             rule = FORM_RULES.get(exercise)
             if rule:
                 score, fb = rule(angles)
-                out["form_score"] = int(score)
+                score, fb = apply_score_gate(int(score), fb, valid, quality)
+                out["form_score"] = score
                 out["feedback"] = fb
         return out
 
@@ -192,6 +252,9 @@ class PoseEngine:
             "detected": True,
             "angles": {k: round(v, 1) for k, v in angles.items()},
         }
+        valid, quality = check_pose_validity(arr[:, 3], None)
+        out["pose_valid"] = bool(valid)
+        out["vis_quality"] = round(quality, 2)
         if self.clf is not None:
             probs = self.clf.predict_proba(feats)[0]
             top_id = int(np.argmax(probs))
@@ -199,10 +262,14 @@ class PoseEngine:
             out["exercise"] = exercise
             out["confidence"] = float(probs[top_id])
             out["all_probs"] = {self.labels[i]: float(p) for i, p in enumerate(probs)}
+            valid, quality = check_pose_validity(arr[:, 3], exercise)
+            out["pose_valid"] = bool(valid)
+            out["vis_quality"] = round(quality, 2)
             rule = FORM_RULES.get(exercise)
             if rule:
                 score, fb = rule(angles)
-                out["form_score"] = int(score)
+                score, fb = apply_score_gate(int(score), fb, valid, quality)
+                out["form_score"] = score
                 out["feedback"] = fb
         return out
 

@@ -369,19 +369,25 @@ async def v2_vision_infer_full(req: Request):
                     # Score the selected target exercise when available, not whatever a single frame predicts.
                     form_score = res.get("form_score")
                     feedback = res.get("feedback", "")
+                    pose_valid = res.get("pose_valid", True)
                     try:
-                        rule = getattr(eng, "__class__", None)  # keep lint quiet; FORM_RULES is module-level in pose_engine
                         import pose_engine as _pe
+                        # 有效性按"目标动作"重新校验 (引擎里是按预测动作校验的)
+                        vis33 = [l.get("v", 0.0) for l in landmarks_out] if landmarks_out else []
+                        if vis33:
+                            pose_valid, vis_quality = _pe.check_pose_validity(vis33, exercise_pred or raw_pred)
+                        else:
+                            vis_quality = 0.0
                         score_rule = _pe.FORM_RULES.get(exercise_pred or raw_pred)
                         if score_rule and angles:
                             _score, _fb = score_rule(angles)
-                            form_score = int(_score)
-                            feedback = _fb
+                            form_score, feedback = _pe.apply_score_gate(int(_score), _fb, pose_valid, vis_quality)
                     except Exception:
                         pass
                     # Rep counting: target exercise is fixed by the user's Spinner selection.
+                    # 无效帧 (人体不完整) 不参与计数, 防止幻觉关节虚计次数
                     det = _get_detector(device_id or "default", exercise_pred)
-                    if det is not None and angles:
+                    if det is not None and angles and pose_valid:
                         det_angles = {
                             "left_knee": angles.get("knee_L"), "right_knee": angles.get("knee_R"),
                             "left_hip": angles.get("hip_L"), "right_hip": angles.get("hip_R"),
@@ -396,6 +402,9 @@ async def v2_vision_infer_full(req: Request):
                             rep_count = int(getattr(det, "rep_count", 0))
                         log_angles = {k: round(v, 1) for k, v in det_angles.items() if v is not None}
                         log.info(f"[REP] device={device_id} target={exercise_pred} angles={log_angles} reps={rep_count} stage={det.stage}")
+                    elif det is not None:
+                        # 无效帧: 维持已有计数, 不推进状态机
+                        rep_count = int(getattr(det, "rep_count", 0))
                     # 写库
                     if session_id and user_id:
                         try:
