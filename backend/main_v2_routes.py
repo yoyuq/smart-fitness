@@ -280,6 +280,15 @@ async def v2_train_stop(req: Request):
                 (sess["session_id"],)).fetchone()
             total_reps = int(row["reps"]) if row and row["reps"] is not None else 0
             avg_form = round(row["form"], 1) if row and row["form"] is not None else None
+            # 评分V2: 优先用按 rep 结算的成绩 (不被站立/组间帧稀释); 无 rep 时回退帧均分
+            try:
+                row_r = conn.execute(
+                    "SELECT COUNT(*) AS n, AVG(total) AS t FROM rep_scores WHERE session_id=?",
+                    (sess["session_id"],)).fetchone()
+                if row_r and row_r["n"] and row_r["n"] > 0 and row_r["t"] is not None:
+                    avg_form = round(row_r["t"], 1)
+            except Exception:
+                pass  # rep_scores 表还没建 (本会话无完成动作)
             conn.execute(
                 "INSERT OR REPLACE INTO sessions (session_id, device_id, user_id, exercise_type, "
                 "start_time, end_time, total_reps, avg_form_score, status) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -349,6 +358,7 @@ async def v2_vision_infer_full(req: Request):
     angles = {}
     landmarks_out = []
     img_for_broadcast = None
+    rep_score_out = None  # 评分V2: 最近一次完成动作的分项分
     try:
         if image_b64:
             import numpy as np, cv2
@@ -402,6 +412,34 @@ async def v2_vision_infer_full(req: Request):
                             rep_count = int(getattr(det, "rep_count", 0))
                         log_angles = {k: round(v, 1) for k, v in det_angles.items() if v is not None}
                         log.info(f"[REP] device={device_id} target={exercise_pred} angles={log_angles} reps={rep_count} stage={det.stage}")
+                        # ===== 按 rep 评分 (评分V2): 有效帧喂给 RepScorer, 计数自增时结算 =====
+                        try:
+                            import rep_scorer as _rs
+                            scorer = _rs.get_rep_scorer(device_id or "default")
+                            completed_rep = scorer.add_frame(exercise_pred, det_angles, rep_count)
+                            if completed_rep is not None:
+                                # 完成一次动作: HUD 分数/反馈切换为本次动作的结算结果
+                                form_score = int(completed_rep["total"])
+                                feedback = completed_rep["feedback"]
+                                if session_id:
+                                    try:
+                                        conn_r = get_db()
+                                        _rs.ensure_table(conn_r)
+                                        conn_r.execute(
+                                            "INSERT INTO rep_scores (session_id, rep_index, exercise, depth, control, "
+                                            "symmetry, total, peak_angle, duration_s, feedback, ts) "
+                                            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                            (session_id, completed_rep["rep_index"], completed_rep["exercise"],
+                                             completed_rep["depth"], completed_rep["control"], completed_rep["symmetry"],
+                                             completed_rep["total"], completed_rep["peak_angle"],
+                                             completed_rep["duration_s"], completed_rep["feedback"], completed_rep["ts"]))
+                                        conn_r.commit()
+                                        conn_r.close()
+                                    except Exception as e:
+                                        log.warning(f"rep_scores write failed: {e}")
+                            rep_score_out = completed_rep or scorer.last_rep
+                        except Exception as e:
+                            log.warning(f"rep scorer failed: {e}")
                     elif det is not None:
                         # 无效帧: 维持已有计数, 不推进状态机
                         rep_count = int(getattr(det, "rep_count", 0))
@@ -447,6 +485,7 @@ async def v2_vision_infer_full(req: Request):
                     "source": source,
                     "device_type": source,
                     "device_id": device_id,
+                    "rep_score": rep_score_out,
                     "ts": time.time(),
                 }
                 asyncio.create_task(_ws_broadcast_user(str(broadcast_uid), payload))
@@ -460,6 +499,7 @@ async def v2_vision_infer_full(req: Request):
         "confidence": round(confidence, 3),
         "form_score": form_score,
         "rep_count": rep_count,
+        "rep_score": rep_score_out,
         "feedback": feedback,
         "angles": angles,
         "paused": paused,
