@@ -259,11 +259,16 @@ async def x_exer_log_list(req: Request, limit: int = 50, days: int = 30):
     since = time.time() - max(1, days) * 86400
     c = _db()
     try:
+        # 真实训练链路写 exercise_log, 手动补录写 user_exercise_log: 两表合并
         rows = c.execute(
             "SELECT id, exercise_type, reps, sets, duration_seconds, avg_form_score, performed_at "
             "FROM user_exercise_log WHERE user_id=? AND performed_at>=? "
+            "UNION ALL "
+            "SELECT log_id AS id, exercise_type, reps, 1 AS sets, duration_s AS duration_seconds, "
+            "       avg_form_score, created_at AS performed_at "
+            "FROM exercise_log WHERE user_id=? AND created_at>=? "
             "ORDER BY performed_at DESC LIMIT ?",
-            (u["user_id"], since, limit)
+            (u["user_id"], since, u["user_id"], since, limit)
         ).fetchall()
         return JSONResponse({"ok": True, "log": [dict(r) for r in rows]})
     finally:
@@ -280,13 +285,18 @@ async def x_exer_summary(req: Request, days: int = 7):
     try:
         rows = c.execute(
             "SELECT exercise_type, "
-            "       COALESCE(SUM(reps),0)              AS total_reps, "
-            "       COUNT(DISTINCT COALESCE(session_id, id)) AS sessions, "
-            "       COALESCE(SUM(duration_seconds),0)  AS total_seconds, "
-            "       AVG(avg_form_score)                AS avg_form "
-            "FROM user_exercise_log WHERE user_id=? AND performed_at>=? "
-            "GROUP BY exercise_type ORDER BY total_reps DESC",
-            (u["user_id"], since)
+            "       COALESCE(SUM(reps),0)             AS total_reps, "
+            "       COUNT(*)                          AS sessions, "
+            "       COALESCE(SUM(duration_seconds),0) AS total_seconds, "
+            "       AVG(avg_form_score)               AS avg_form "
+            "FROM ("
+            "  SELECT exercise_type, reps, duration_seconds, avg_form_score "
+            "  FROM user_exercise_log WHERE user_id=? AND performed_at>=? "
+            "  UNION ALL "
+            "  SELECT exercise_type, reps, duration_s, avg_form_score "
+            "  FROM exercise_log WHERE user_id=? AND created_at>=?"
+            ") GROUP BY exercise_type ORDER BY total_reps DESC",
+            (u["user_id"], since, u["user_id"], since)
         ).fetchall()
         return JSONResponse({"ok": True, "days": days, "by_type": [dict(r) for r in rows]})
     finally:

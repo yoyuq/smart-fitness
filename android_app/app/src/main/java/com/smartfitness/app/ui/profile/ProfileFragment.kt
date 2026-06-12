@@ -36,6 +36,10 @@ class ProfileFragment : Fragment() {
     private lateinit var bindingsContainer: LinearLayout
     private lateinit var goalsView: TextView
     private lateinit var achievementsView: TextView
+    private lateinit var avatarView: TextView
+    private lateinit var chipsRow: LinearLayout
+    private lateinit var weekBarsRow: LinearLayout
+    private lateinit var recentContainer: LinearLayout
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -59,94 +63,192 @@ class ProfileFragment : Fragment() {
         }
         scroll.addView(root)
         scroll.setBackgroundColor(ctx.getColor(R.color.bg))
-        with(root) {
 
+        // 不再上屏的旧容器: 仅为兼容既有 loaders 的 lateinit
+        devicesContainer = LinearLayout(ctx)
+        bindingsContainer = LinearLayout(ctx)
+        goalsView = TextView(ctx)
+        achievementsView = TextView(ctx)
+
+        with(root) {
+            // ===== 头部: 头像 + 昵称 + 数据胶囊 (Keep 式) =====
+            val header = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(UiKit.dp(ctx, 4), UiKit.dp(ctx, 8), 0, UiKit.dp(ctx, 12))
+            }
+            avatarView = TextView(ctx).apply {
+                textSize = 22f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(ctx.getColor(R.color.primary_dark))
+                gravity = android.view.Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(UiKit.dp(ctx, 56), UiKit.dp(ctx, 56))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(ctx.getColor(R.color.primary_alpha10))
+                    setStroke(UiKit.dp(ctx, 2), ctx.getColor(R.color.primary))
+                }
+            }
+            header.addView(avatarView)
+            val nameCol = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(UiKit.dp(ctx, 12), 0, 0, 0)
+            }
             usernameView = TextView(ctx).apply {
-                textSize = 24f
+                textSize = 20f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 setTextColor(ctx.getColor(R.color.on_surface))
-            }.also { addView(it) }
+            }.also { nameCol.addView(it) }
             createdAtView = TextView(ctx).apply {
                 textSize = 12f
-                setTextColor(ctx.getColor(R.color.on_surface_secondary))
-                setPadding(0, 4, 0, UiKit.dp(ctx, 16))
+                setTextColor(ctx.getColor(R.color.on_surface_tertiary))
+                setPadding(0, 2, 0, 0)
+            }.also { nameCol.addView(it) }
+            header.addView(nameCol)
+            addView(header)
+
+            // 数据胶囊行: 连续 / 累计 / 成就
+            chipsRow = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(UiKit.dp(ctx, 4), 0, 0, UiKit.dp(ctx, 12))
             }.also { addView(it) }
 
-            // 身体指标卡片
+            // ===== AI 私人教练横幅 (Keep 会员位) =====
+            val banner = com.google.android.material.card.MaterialCardView(ctx).apply {
+                radius = UiKit.dp(ctx, 16).toFloat()
+                cardElevation = 0f
+                setCardBackgroundColor(ctx.getColor(R.color.on_surface))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = UiKit.dp(ctx, 12) }
+            }
+            val bannerRow = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(UiKit.dp(ctx, 20), UiKit.dp(ctx, 16), UiKit.dp(ctx, 16), UiKit.dp(ctx, 16))
+            }
+            val bannerCol = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            bannerCol.addView(TextView(ctx).apply {
+                text = "AI 私人教练"
+                textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(0xFFFFFFFF.toInt())
+            })
+            bannerCol.addView(TextView(ctx).apply {
+                text = "懂你数据和身体的专属教练"
+                textSize = 12f
+                setTextColor(0xFFA1A1B5.toInt())
+                setPadding(0, 2, 0, 0)
+            })
+            bannerRow.addView(bannerCol)
+            bannerRow.addView(MaterialButton(ctx).apply {
+                text = "去复盘"
+                textSize = 13f
+                cornerRadius = UiKit.dp(ctx, 18)
+                minWidth = 0
+                minimumWidth = 0
+                setPadding(UiKit.dp(ctx, 20), 0, UiKit.dp(ctx, 20), 0)
+                setOnClickListener { showCoachReview() }
+            })
+            banner.addView(bannerRow)
+            addView(banner)
+
+            // ===== 功能宫格 (4 列 x 2 行) =====
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "身体指标"))
-                bodyMetricView = UiKit.body(ctx, "暂无数据, 记录后教练更懂你").apply {
-                    setTextColor(ctx.getColor(R.color.hint))
-                }.also { inner.addView(it) }
-                inner.addView(UiKit.outlinedButton(ctx, "记录体重 / 身高") { showBodyMetricDialog() })
+                val grid = android.widget.GridLayout(ctx).apply { columnCount = 4 }
+                fun cell(iconRes: Int, label: String, tintRes: Int = R.color.on_surface_secondary,
+                         onClick: () -> Unit) {
+                    val cellBox = LinearLayout(ctx).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = android.view.Gravity.CENTER
+                        setPadding(0, UiKit.dp(ctx, 10), 0, UiKit.dp(ctx, 10))
+                        layoutParams = android.widget.GridLayout.LayoutParams(
+                            android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f),
+                            android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                        ).apply { width = 0 }
+                        isClickable = true
+                        setOnClickListener { onClick() }
+                    }
+                    cellBox.addView(android.widget.ImageView(ctx).apply {
+                        setImageResource(iconRes)
+                        imageTintList = android.content.res.ColorStateList.valueOf(ctx.getColor(tintRes))
+                        layoutParams = LinearLayout.LayoutParams(UiKit.dp(ctx, 24), UiKit.dp(ctx, 24))
+                    })
+                    cellBox.addView(TextView(ctx).apply {
+                        text = label
+                        textSize = 12f
+                        setTextColor(ctx.getColor(R.color.on_surface_secondary))
+                        setPadding(0, UiKit.dp(ctx, 6), 0, 0)
+                    })
+                    grid.addView(cellBox)
+                }
+                cell(R.drawable.ic_g_body, "身体指标") { showBodyMetricDialog() }
+                cell(R.drawable.ic_g_goal, "我的目标") { showGoalsDialog() }
+                cell(R.drawable.ic_g_memory, "教练记忆") { showAddMemoryDialog() }
+                cell(R.drawable.ic_g_trophy, "成就") { showAchievementsDialog() }
+                cell(R.drawable.ic_g_device, "绑定设备") { showBindDialog() }
+                cell(R.drawable.ic_g_export, "导出数据") { exportCsv() }
+                cell(R.drawable.ic_g_server, "服务器") { showBaseUrlDialog() }
+                cell(R.drawable.ic_g_logout, "退出登录", R.color.error) {
+                    ApiClient.clearAuth()
+                    findNavController().navigate(R.id.loginFragment, null,
+                        NavOptions.Builder().setPopUpTo(R.id.loginFragment, true).build())
+                }
+                inner.addView(grid)
                 addView(cardView)
             }
 
-            // 设备卡片 (手机注册 + ESP32 绑定)
+            // ===== 数据横排: 本周打卡 + 体重 =====
+            val dataRow = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            // 左: 本周打卡条形图
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, getString(R.string.devices)))
-                devicesContainer = LinearLayout(ctx).apply {
-                    orientation = LinearLayout.VERTICAL
+                (cardView.layoutParams as LinearLayout.LayoutParams).apply {
+                    width = 0; weight = 1f; rightMargin = UiKit.dp(ctx, 6)
+                }
+                inner.addView(UiKit.caption(ctx, "本周打卡"))
+                weekBarsRow = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.BOTTOM
+                    setPadding(0, UiKit.dp(ctx, 10), 0, 0)
                 }.also { inner.addView(it) }
-                inner.addView(UiKit.caption(ctx, "ESP32 绑定").apply {
+                dataRow.addView(cardView)
+            }
+            // 右: 体重数据
+            UiKit.card(ctx).let { (cardView, inner) ->
+                (cardView.layoutParams as LinearLayout.LayoutParams).apply {
+                    width = 0; weight = 1f; leftMargin = UiKit.dp(ctx, 6)
+                }
+                inner.addView(UiKit.caption(ctx, "体重数据"))
+                bodyMetricView = TextView(ctx).apply {
+                    text = "-- 公斤"
+                    textSize = 22f
+                    setTypeface(android.graphics.Typeface.create("sans-serif-condensed",
+                        android.graphics.Typeface.BOLD))
+                    setTextColor(ctx.getColor(R.color.on_surface))
                     setPadding(0, UiKit.dp(ctx, 8), 0, 0)
-                })
-                bindingsContainer = LinearLayout(ctx).apply {
-                    orientation = LinearLayout.VERTICAL
-                }.also { inner.addView(it) }
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "绑定 ESP32 设备"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { showBindDialog() }
-                })
-                addView(cardView)
-            }
-
-            // 目标卡片 (整卡可点, 不再塞按钮)
-            UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "我的目标"))
-                goalsView = UiKit.body(ctx, "暂无目标 · 点击设置 →").apply {
-                    setTextColor(ctx.getColor(R.color.hint))
                 }.also { inner.addView(it) }
                 cardView.isClickable = true
-                cardView.setOnClickListener { showGoalsDialog() }
-                addView(cardView)
+                cardView.setOnClickListener { showBodyMetricDialog() }
+                dataRow.addView(cardView)
             }
+            addView(dataRow)
 
-            // 成就卡片
+            // ===== 最新记录 =====
             UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "成就"))
-                achievementsView = UiKit.body(ctx, "加载中...", 14f).also { inner.addView(it) }
-                addView(cardView)
-            }
-
-            // AI 私人教练卡片 (核心卖点)
-            UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "AI 私人教练"))
-                inner.addView(UiKit.caption(ctx, "你的专属健身伙伴 · 懂你的数据和身体"))
-                inner.addView(MaterialButton(ctx).apply {
-                    text = "教练复盘 (分析我的数据)"
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setOnClickListener { showCoachReview() }
-                })
-                inner.addView(UiKit.outlinedButton(ctx, "告诉教练 (伤病 / 目标 / 偏好)") { showAddMemoryDialog() })
-                addView(cardView)
-            }
-
-            // 数据与账号卡片
-            UiKit.card(ctx).let { (cardView, inner) ->
-                inner.addView(UiKit.cardTitle(ctx, "数据与账号"))
-                inner.addView(UiKit.outlinedButton(ctx, "导出我的数据 (CSV)") { exportCsv() })
-                inner.addView(UiKit.outlinedButton(ctx, "服务器地址 (高级)") { showBaseUrlDialog() })
-                inner.addView(MaterialButton(ctx).apply {
-                    text = getString(R.string.logout)
-                    cornerRadius = UiKit.dp(ctx, 12)
-                    setBackgroundColor(ctx.getColor(R.color.error))
-                    setOnClickListener {
-                        ApiClient.clearAuth()
-                        findNavController().navigate(R.id.loginFragment, null, NavOptions.Builder().setPopUpTo(R.id.loginFragment, true).build())
-                    }
-                })
+                inner.addView(UiKit.cardTitle(ctx, "最新记录"))
+                recentContainer = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                }.also { inner.addView(it) }
                 addView(cardView)
             }
         }
@@ -155,11 +257,128 @@ class ProfileFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         loadProfile()
-        loadDevices()
         loadBodyMetric()
-        loadBindings()
         loadGoals()
         loadAchievements()
+        loadHeaderChips()
+        loadWeekBars()
+        loadRecent()
+    }
+
+    // ---------- Keep 式头部/数据区加载 ----------
+
+    private fun addChip(text: String) {
+        val ctx = requireContext()
+        chipsRow.addView(TextView(ctx).apply {
+            this.text = text
+            textSize = 12f
+            setTextColor(ctx.getColor(R.color.on_surface_secondary))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = UiKit.dp(ctx, 14).toFloat()
+                setColor(ctx.getColor(R.color.surface))
+                setStroke(UiKit.dp(ctx, 1), ctx.getColor(R.color.divider))
+            }
+            setPadding(UiKit.dp(ctx, 12), UiKit.dp(ctx, 6), UiKit.dp(ctx, 12), UiKit.dp(ctx, 6))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { rightMargin = UiKit.dp(ctx, 8) }
+        })
+    }
+
+    private fun loadHeaderChips() {
+        lifecycleScope.launch {
+            try {
+                val s = ApiClient.service.streak()
+                val ach = ApiClient.service.achievements()
+                if (!isAdded) return@launch
+                chipsRow.removeAllViews()
+                addChip("⚡ 连续 ${s.currentStreak} 天")
+                addChip("最长 ${s.longestStreak} 天")
+                addChip("🏆 成就 ${ach.achievements.count { it.unlocked }}")
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun loadWeekBars() {
+        lifecycleScope.launch {
+            try {
+                val resp = ApiClient.service.calendarDays()
+                if (!isAdded) return@launch
+                val ctx = requireContext()
+                val byDay = resp.days.associateBy { it.d }
+                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val cal = java.util.Calendar.getInstance()
+                cal.add(java.util.Calendar.DAY_OF_YEAR, -6)
+                weekBarsRow.removeAllViews()
+                for (i in 0 until 7) {
+                    val reps = byDay[fmt.format(cal.time)]?.reps ?: 0
+                    val h = if (reps > 0) 36 else 18
+                    weekBarsRow.addView(View(ctx).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, UiKit.dp(ctx, h), 1f).apply {
+                            leftMargin = UiKit.dp(ctx, 2); rightMargin = UiKit.dp(ctx, 2)
+                        }
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = UiKit.dp(ctx, 3).toFloat()
+                            setColor(ctx.getColor(if (reps > 0) R.color.primary else R.color.divider))
+                        }
+                    })
+                    cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun loadRecent() {
+        lifecycleScope.launch {
+            try {
+                val raw = ApiClient.service.listExerciseLog(limit = 3, days = 90)
+                if (!isAdded) return@launch
+                val ctx = requireContext()
+                recentContainer.removeAllViews()
+                if (raw.log.isEmpty()) {
+                    recentContainer.addView(UiKit.caption(ctx, "还没有训练记录, 去完成第一次吧"))
+                    return@launch
+                }
+                val fmt = java.text.SimpleDateFormat("MM-dd", Locale.getDefault())
+                raw.log.take(3).forEach { e ->
+                    val row = LinearLayout(ctx).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        setPadding(0, UiKit.dp(ctx, 8), 0, UiKit.dp(ctx, 8))
+                    }
+                    row.addView(View(ctx).apply {
+                        layoutParams = LinearLayout.LayoutParams(UiKit.dp(ctx, 10), UiKit.dp(ctx, 10)).apply {
+                            rightMargin = UiKit.dp(ctx, 10)
+                        }
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(ctx.getColor(R.color.primary))
+                        }
+                    })
+                    val col = LinearLayout(ctx).apply {
+                        orientation = LinearLayout.VERTICAL
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    col.addView(UiKit.body(ctx, "${e.exerciseType}  ${e.reps} 个", 15f).apply {
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    })
+                    val form = e.avgFormScore?.let { "评分 ${it.toInt()}" } ?: ""
+                    col.addView(UiKit.caption(ctx, form))
+                    row.addView(col)
+                    row.addView(UiKit.caption(ctx, fmt.format(java.util.Date((e.performedAt * 1000).toLong()))))
+                    recentContainer.addView(row)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun showAchievementsDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("我的成就")
+            .setMessage(achievementsView.text)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     // ---------- AI 私人教练管家 ----------
@@ -347,7 +566,8 @@ class ProfileFragment : Fragment() {
                 val p = ApiClient.service.profile()
                 p.user?.let {
                     usernameView.text = it.username
-                    createdAtView.text = "Joined: ${formatTimestamp(it.createdAt)}"
+                    createdAtView.text = "加入于 ${formatTimestamp(it.createdAt)}"
+                    avatarView.text = it.username.take(1).uppercase()
                 }
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Profile load failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -403,11 +623,8 @@ class ProfileFragment : Fragment() {
             try {
                 val r = ApiClient.service.latestBodyMetric()
                 val m = r.latest
-                bodyMetricView.text = if (m == null) {
-                    "(未记录)"
-                } else {
-                    "体重 ${m.weightKg ?: "-"}kg / 身高 ${m.heightCm ?: "-"}cm / BMI ${m.bmi ?: "-"}"
-                }
+                bodyMetricView.text = if (m?.weightKg == null) "点击记录"
+                                      else "${m.weightKg} 公斤"
             } catch (_: Exception) {}
         }
     }
