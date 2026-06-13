@@ -455,6 +455,9 @@ async def v2_vision_infer_full(req: Request):
                             "left_elbow": angles.get("elbow_L"), "right_elbow": angles.get("elbow_R"),
                             "left_shoulder": angles.get("shoulder_L"), "right_shoulder": angles.get("shoulder_R"),
                             "torso_tilt": angles.get("torso_tilt"),
+                            # 多关节生物力学量 (评分V2 第四阶段)
+                            "ankle_dx": angles.get("ankle_dx"), "wrist_above": angles.get("wrist_above"),
+                            "head_drop": angles.get("head_drop"), "head_fwd": angles.get("head_fwd"),
                         }
                         method = getattr(det, f"count_{exercise_pred}", None)
                         if callable(method):

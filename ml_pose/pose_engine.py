@@ -57,12 +57,27 @@ def make_features_single(landmarks_33x4):
     extras = np.array([[a_knee_L, a_knee_R, a_hip_L, a_hip_R, a_elb_L, a_elb_R,
                         a_sho_L, a_sho_R, torso_tilt, hip_y, sho_hip_y, vis_mean]], dtype=np.float32)
     feats = np.concatenate([flat.astype(np.float32), extras], axis=-1)
+
+    # ---- 多关节生物力学量 (评分V2 第四阶段): 规则用单关节角看不见的维度 ----
+    # 图像坐标 y 向下为正; 全部用 torso_len 归一化, 抵消远近.
+    tl = float(torso_len[0, 0])
+    ankle_dx = float(abs(xyz[0, L_ANKLE, 0] - xyz[0, R_ANKLE, 0]) / tl)      # 双脚横向间距(开合跳脚距)
+    wrist_mid_y = (xyz[0, L_WRI, 1] + xyz[0, R_WRI, 1]) / 2
+    wrist_above = float((sho_mid[0, 1] - wrist_mid_y) / tl)                   # >0 腕高于肩(手举过头)
+    nose_y, nose_x = float(xyz[0, 0, 1]), float(xyz[0, 0, 0])
+    head_drop = float((nose_y - sho_mid[0, 1]) / tl)                         # >0 头低于肩(俯卧撑头下垂)
+    head_fwd = float(abs(nose_x - sho_mid[0, 0]) / tl)                       # 头相对肩的水平前探
+
     return feats, {
         "knee_L": a_knee_L, "knee_R": a_knee_R,
         "hip_L": a_hip_L,   "hip_R": a_hip_R,
         "elbow_L": a_elb_L, "elbow_R": a_elb_R,
         "shoulder_L": a_sho_L, "shoulder_R": a_sho_R,
         "torso_tilt": torso_tilt,
+        "ankle_dx": round(ankle_dx, 3),
+        "wrist_above": round(wrist_above, 3),
+        "head_drop": round(head_drop, 3),
+        "head_fwd": round(head_fwd, 3),
     }
 
 

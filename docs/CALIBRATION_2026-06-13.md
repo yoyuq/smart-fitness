@@ -50,10 +50,40 @@ push_up +41.4、jumping_jack +32.4 维持结构性偏差（同上，需第四阶
 残留少量 0（快速开合跳）：运动模糊致 YOLO 关键点置信度低被门禁正确挡掉，属真实硬场景。
 后续仍可做：开练前机位自检 / 用 3D world 坐标算角度替代 2D 投影。
 
+## 第四阶段：多关节特征闭合结构性缺陷（同日）
+
+第三阶段诊断出 push_up/jumping_jack 的偏差是**单关节角规则物理上看不见**的错误。
+第四阶段给 `make_features_single` 增补多关节生物力学量（脚距 ankle_dx / 腕高
+wrist_above / 头位 head_drop·head_fwd），并在 rep_scorer 加结构性错误扣分。
+
+关键修复：**开合跳评分主关节 肘→肩**。肘角在手臂下垂/举起时都≈175°，
+区分不出手有没有抬起；肩角（肘-肩-髋）身侧≈20°、过头顶≈170° 才是正确信号。
+
+各动作偏差变化（67-68 rep 样本）：
+
+| 动作 | 三阶段 | 四阶段 | 手段 |
+|---|---|---|---|
+| squat | +4.9 | **+3.1** | 加躯干前倾(torso_tilt>55)扣分 |
+| lunge | −5.1 | **−2.7** | （间接受益） |
+| push_up | **+41.4** | **+26.4** | 肘外展(底部肩角>65)扣分 |
+| jumping_jack | **+32.4** | **−4.4** | 主关节改肩角 + 脚距扣分 |
+
+平均绝对差 19.3（一阶段）→ 13.9（四阶段）。jumping_jack 从最差的结构性失败
+变为基本对齐；push_up 减半但仍有残差——剩余的 not_low/head_drop 是视角导致的
+深度误读，需真实 3D 深度或头部关键点，属学习模型范畴。
+
+### AQA 学习模型脚手架（train_aqa.py）
+
+把评审团 errors_json 当标签、rep 多关节特征当输入，训练"每错误一个分类器"。
+`train_aqa.py status` 现状：68 个标注全部"数据不足"（每个错误正/负各需 ≥30）。
+**结论诚实**：当前靠多关节规则，数据量起来后自动切学习模型。脚手架已就位，
+随评审标签积累可直接 `train`。
+
 ## 复现
 
 ```
-python video_sim.py [exercise] --max-frames 240   # 灌视频产 rep
+python video_sim.py [exercise] --max-frames 300   # 灌视频产 rep
 python ai_review.py run --limit 100               # AI 评审团评审
 python ai_review.py report                         # 看偏差与 top 分歧
+python train_aqa.py status                         # 看学习模型数据缺口
 ```

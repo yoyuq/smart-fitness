@@ -30,8 +30,41 @@ EXERCISE_CFG = {
     "lunge":          {"joint": "knee",     "extremum": "min", "depth_range": (80, 110),  "duration": (1.5, 7.0), "asymmetric": True},
     "bicep_curl":     {"joint": "elbow",    "extremum": "min", "depth_range": (30, 60),   "duration": (1.0, 5.0)},
     "shoulder_press": {"joint": "shoulder", "extremum": "max", "depth_range": (150, 180), "duration": (1.0, 5.0)},
-    "jumping_jack":   {"joint": "elbow",    "extremum": "max", "depth_range": (140, 180), "duration": (0.4, 2.5)},
+    # 2026-06-13 第四阶段: 开合跳主关节 肘→肩. 肘角在手臂下垂/举起时都≈175°, 区分不出
+    # 手有没有抬起; 肩角(肘-肩-髋)身侧≈20°、过头顶≈170°, 才是"手臂举起"的正确信号.
+    "jumping_jack":   {"joint": "shoulder", "extremum": "max", "depth_range": (140, 180), "duration": (0.4, 2.5)},
 }
+
+
+def _mean_at(frames, idx, *keys):
+    """取第 idx 帧 feat 里若干键的均值(忽略 None)."""
+    feat = frames[idx].get("feat") or {}
+    vals = [feat[k] for k in keys if feat.get(k) is not None]
+    return (sum(vals) / len(vals)) if vals else None
+
+
+def _structural_errors(exercise, frames, peak_i):
+    """单关节角规则看不见的结构性错误 (第四阶段多关节特征).
+
+    返回 [(penalty, feedback, error_key), ...]. 在动作极值帧(peak_i)上判定.
+    """
+    out = []
+    if exercise == "squat":
+        # 底部躯干过度前倾(torso_tilt 大). 现有 torso_tilt 特征可靠, AI 多次标出此错.
+        tilt = _mean_at(frames, peak_i, "torso_tilt")
+        if tilt is not None and abs(tilt) > 55:
+            out.append((15, "躯干过度前倾, 挺胸收紧核心", "torso_lean"))
+    elif exercise == "push_up":
+        # 底部肩角大 = 肘部外展(大臂远离躯干). 标准俯卧撑大臂贴身肩角小.
+        sho = _mean_at(frames, peak_i, "left_shoulder", "right_shoulder")
+        if sho is not None and sho > 65:
+            out.append((20, "肘部外展, 大臂收向躯干约45度", "elbow_flare"))
+    elif exercise == "jumping_jack":
+        # 手臂举到顶时双脚应同时打开; ankle_dx 是肩宽归一化的横向脚距.
+        ankle = _mean_at(frames, peak_i, "ankle_dx")
+        if ankle is not None and ankle < 0.9:
+            out.append((14, "双脚打开幅度不足, 跳开更大", "feet_narrow"))
+    return out
 
 DEPTH_FEEDBACK = {
     "squat":          ("蹲得太浅, 大腿尽量与地面平行", "蹲太深, 注意膝盖压力"),
@@ -119,7 +152,8 @@ class RepScorer:
             else:
                 primary = sum(vals) / len(vals)
             lr_diff = abs(l - r) if (l is not None and r is not None) else None
-            self.frames.append({"ts": ts, "primary": primary, "lr_diff": lr_diff})
+            # 缓存完整角度+生物力学量, 供结算时做结构性错误判定 (第四阶段)
+            self.frames.append({"ts": ts, "primary": primary, "lr_diff": lr_diff, "feat": angles})
 
         completed = None
         if rep_count > self.prev_count and self.frames:
@@ -156,7 +190,12 @@ class RepScorer:
         else:
             symmetry, sym_issue = _score_symmetry(mean_diff)
 
-        total = round(0.5 * depth + 0.3 * control + 0.2 * symmetry, 1)
+        base_total = 0.5 * depth + 0.3 * control + 0.2 * symmetry
+
+        # 结构性错误扣分 (第四阶段多关节特征): 单关节角看不见的问题
+        struct = _structural_errors(self.exercise, frames, peak_i)
+        struct_penalty = sum(p for p, _fb, _k in struct)
+        total = round(max(0.0, base_total - struct_penalty), 1)
 
         fb = []
         shallow_fb, deep_fb = DEPTH_FEEDBACK.get(self.exercise, ("幅度不足", "幅度过大"))
@@ -170,6 +209,8 @@ class RepScorer:
             fb.append("速度偏慢, 保持连贯")
         if sym_issue == "asym":
             fb.append("左右不对称, 注意发力均衡")
+        for _p, sfb, _k in struct:
+            fb.append(sfb)
 
         rep = {
             "rep_index": len(self.rep_scores) + 1,
