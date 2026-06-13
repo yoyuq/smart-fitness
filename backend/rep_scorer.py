@@ -19,13 +19,18 @@ log = logging.getLogger("rep_scorer")
 
 # 各动作: (主角度键, 极值方向, 深度满分区间, 时长合理区间秒)
 # 主角度键对应 route 的 det_angles: left_/right_ + knee/elbow/shoulder
+# depth_range / duration 在 2026-06-13 首轮 AI 评审团标定后调整 (见 docs/CALIBRATION_2026-06-13.md):
+#   - squat 下界 70->40: 真实深蹲膝角到 40° 是好动作, 旧规则误判"蹲太深"扣分
+#   - push_up 上界 90->78: 旧规则对"几乎没下放"(肘 ~85°)误判满分
+#   - 节奏: 超长(>20s)单次为 rep 误合并, 置中性 (见 _finalize)
+MAX_PLAUSIBLE_REP_S = 20.0
 EXERCISE_CFG = {
-    "squat":          {"joint": "knee",     "extremum": "min", "depth_range": (70, 100),  "duration": (1.5, 6.0)},
-    "push_up":        {"joint": "elbow",    "extremum": "min", "depth_range": (60, 90),   "duration": (1.0, 5.0)},
-    "lunge":          {"joint": "knee",     "extremum": "min", "depth_range": (80, 110),  "duration": (1.5, 6.0), "asymmetric": True},
+    "squat":          {"joint": "knee",     "extremum": "min", "depth_range": (40, 100),  "duration": (1.2, 7.0)},
+    "push_up":        {"joint": "elbow",    "extremum": "min", "depth_range": (60, 78),   "duration": (1.0, 6.0)},
+    "lunge":          {"joint": "knee",     "extremum": "min", "depth_range": (80, 110),  "duration": (1.5, 7.0), "asymmetric": True},
     "bicep_curl":     {"joint": "elbow",    "extremum": "min", "depth_range": (30, 60),   "duration": (1.0, 5.0)},
     "shoulder_press": {"joint": "shoulder", "extremum": "max", "depth_range": (150, 180), "duration": (1.0, 5.0)},
-    "jumping_jack":   {"joint": "elbow",    "extremum": "max", "depth_range": (140, 180), "duration": (0.4, 2.0)},
+    "jumping_jack":   {"joint": "elbow",    "extremum": "max", "depth_range": (140, 180), "duration": (0.4, 2.5)},
 }
 
 DEPTH_FEEDBACK = {
@@ -141,7 +146,11 @@ class RepScorer:
         lo, hi = cfg["depth_range"]
         depth, depth_issue = _score_depth(extremum, cfg["extremum"], lo, hi)
         dlo, dhi = cfg["duration"]
-        control, ctrl_issue = _score_control(duration, dlo, dhi)
+        if duration > MAX_PLAUSIBLE_REP_S:
+            # rep 检测把多次动作误合并成一个超长"动作", 节奏不可信 → 置中性不污染总分
+            control, ctrl_issue = 100.0, None
+        else:
+            control, ctrl_issue = _score_control(duration, dlo, dhi)
         if cfg.get("asymmetric"):
             symmetry, sym_issue = 100.0, None   # 弓步天然不对称, 不计此项
         else:

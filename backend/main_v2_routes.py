@@ -410,8 +410,13 @@ async def v2_vision_infer_full(req: Request):
             arr = np.frombuffer(raw, dtype=np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             img_for_broadcast = img
+            # 帧时间戳: 默认服务器时间; 回放/模拟可传 frame_ts (视频真实时间), 保证节奏评分准确
+            try:
+                frame_ts = float(body.get("frame_ts") or 0) or time.time()
+            except (TypeError, ValueError):
+                frame_ts = time.time()
             if not paused:
-                _buffer_frame(device_id or "default", time.time(), raw)
+                _buffer_frame(device_id or "default", frame_ts, raw)
             eng = get_pose_engine()
             if eng is not None and img is not None:
                 res = eng.infer_from_image(img)
@@ -462,7 +467,7 @@ async def v2_vision_infer_full(req: Request):
                         try:
                             import rep_scorer as _rs
                             scorer = _rs.get_rep_scorer(device_id or "default")
-                            completed_rep = scorer.add_frame(exercise_pred, det_angles, rep_count)
+                            completed_rep = scorer.add_frame(exercise_pred, det_angles, rep_count, ts=frame_ts)
                             if completed_rep is not None:
                                 # 完成一次动作: HUD 分数/反馈切换为本次动作的结算结果
                                 form_score = int(completed_rep["total"])
