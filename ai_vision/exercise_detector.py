@@ -64,7 +64,11 @@ class ExerciseDetector:
         self.stage = RepStage.UP
         self._consecutive_frames_down = 0
         self._consecutive_frames_up = 0
-        self._required_frames = 2  # At ~2fps preview, 3 frames is too strict; 2 frames = 1 second hysteresis
+        # 1 帧确认: 预览仅 ~2fps, 一个动作相位常只采到 1 帧, 要求连续 2 帧会漏计
+        # (2026-06-13 真实视频诊断: rf=2 俯卧撑/弓步/开合跳大量漏到 0, rf=1 恢复).
+        # 去抖由 down/up 阈值之间的角度间隙保证 (如深蹲 110/150 = 40° 带) + 状态机
+        # 必须走完整 UP->DOWN->UP 循环才计一次, 双重防止抖动重复计数, 不靠帧数.
+        self._required_frames = 1
         self._history: List[Tuple[ExerciseType, float, int]] = []  # (exercise, timestamp, rep)
         self._target_exercise: Optional[ExerciseType] = None
         self._max_history = 10000  # cap to prevent unbounded growth
