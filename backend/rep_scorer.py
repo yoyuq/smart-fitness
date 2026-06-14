@@ -80,6 +80,27 @@ def _clamp(v, lo=0, hi=100):
     return max(lo, min(hi, v))
 
 
+SERIES_LEN = 32  # 每个 rep 的角度时序重采样到的定长 (供时序模型用)
+
+
+def _resample(seq, n=SERIES_LEN):
+    """把任意长度的数值序列线性重采样到定长 n (纯 python, 不依赖 numpy)."""
+    seq = [v for v in seq if v is not None]
+    if not seq:
+        return [0.0] * n
+    if len(seq) == 1:
+        return [round(float(seq[0]), 1)] * n
+    m = len(seq)
+    out = []
+    for i in range(n):
+        pos = i * (m - 1) / (n - 1)
+        lo = int(pos)
+        frac = pos - lo
+        hi = min(lo + 1, m - 1)
+        out.append(round(seq[lo] * (1 - frac) + seq[hi] * frac, 1))
+    return out
+
+
 def _score_depth(extremum: float, direction: str, lo: float, hi: float):
     """主角度极值落在 [lo,hi] 满分; 越界线性衰减."""
     if direction == "min":
@@ -212,6 +233,20 @@ class RepScorer:
         for _p, sfb, _k in struct:
             fb.append(sfb)
 
+        # 角度时序 (定长重采样): 供时序 AQA 模型训练. 通道 = 主角度/躯干/左右差/肩角
+        def _ch(key):
+            return [(f.get("feat") or {}).get(key) for f in frames]
+        angle_series = {
+            "primary": _resample(primaries),
+            "torso": _resample(_ch("torso_tilt")),
+            "lr_diff": _resample([f["lr_diff"] for f in frames]),
+            "shoulder": _resample([
+                ((f.get("feat") or {}).get("left_shoulder", 0) +
+                 (f.get("feat") or {}).get("right_shoulder", 0)) / 2
+                if (f.get("feat") or {}).get("left_shoulder") is not None else None
+                for f in frames]),
+        }
+
         rep = {
             "rep_index": len(self.rep_scores) + 1,
             "exercise": self.exercise,
@@ -227,6 +262,7 @@ class RepScorer:
             "start_ts": frames[0]["ts"],
             "peak_ts": frames[peak_i]["ts"],
             "end_ts": frames[-1]["ts"],
+            "angle_series": angle_series,
         }
         self.rep_scores.append(rep)
         self.last_rep = rep
@@ -261,10 +297,11 @@ def ensure_table(conn):
             peak_angle REAL, duration_s REAL,
             feedback TEXT,
             ts REAL,
-            start_frame TEXT, peak_frame TEXT, end_frame TEXT
+            start_frame TEXT, peak_frame TEXT, end_frame TEXT,
+            angle_series TEXT
         )""")
-    # 老库迁移: 补关键帧路径列
-    for col in ("start_frame", "peak_frame", "end_frame"):
+    # 老库迁移: 补关键帧路径列 + 角度时序列
+    for col in ("start_frame", "peak_frame", "end_frame", "angle_series"):
         try:
             conn.execute(f"ALTER TABLE rep_scores ADD COLUMN {col} TEXT")
         except Exception:

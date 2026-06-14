@@ -499,13 +499,14 @@ async def v2_vision_infer_full(req: Request):
                                         conn_r.execute(
                                             "INSERT INTO rep_scores (session_id, rep_index, exercise, depth, control, "
                                             "symmetry, total, peak_angle, duration_s, feedback, ts, "
-                                            "start_frame, peak_frame, end_frame) "
-                                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                            "start_frame, peak_frame, end_frame, angle_series) "
+                                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                             (session_id, completed_rep["rep_index"], completed_rep["exercise"],
                                              completed_rep["depth"], completed_rep["control"], completed_rep["symmetry"],
                                              completed_rep["total"], completed_rep["peak_angle"],
                                              completed_rep["duration_s"], completed_rep["feedback"], completed_rep["ts"],
-                                             kf["start_frame"], kf["peak_frame"], kf["end_frame"]))
+                                             kf["start_frame"], kf["peak_frame"], kf["end_frame"],
+                                             json.dumps(completed_rep.get("angle_series"))))
                                         conn_r.commit()
                                         conn_r.close()
                                     except Exception as e:
