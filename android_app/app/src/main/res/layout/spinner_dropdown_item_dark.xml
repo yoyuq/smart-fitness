@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spinner 下拉项: 深色弹窗背景上用白字, 加大点距便于点选 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
+    android:textColor="#FFFFFFFF"
+    android:textSize="15sp"
+    android:background="#FF2A2A2E"
+    android:gravity="center_vertical" />

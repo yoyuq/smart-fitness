@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深色训练页 spinner 背景: 半透明白底 + 细描边 + 圆角, 比纯 #33FFFFFF 更清晰 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#22FFFFFF" />
+    <stroke android:width="1dp" android:color="#44FFFFFF" />
+    <corners android:radius="10dp" />
+</shape>

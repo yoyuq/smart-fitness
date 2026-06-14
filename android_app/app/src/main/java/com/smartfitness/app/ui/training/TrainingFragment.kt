@@ -155,11 +155,7 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         btnToggle = view.findViewById(R.id.btn_training_toggle)
         fabSettings = view.findViewById(R.id.fab_settings)
 
-        spinnerCameraSource?.adapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            cameraSources.map { it.label }
-        )
+        spinnerCameraSource?.adapter = darkSpinnerAdapter(cameraSources.map { it.label })
         spinnerCameraSource?.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val next = cameraSources.getOrNull(position) ?: CameraSource.ESP32
@@ -167,17 +163,9 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
         }
-        spinnerExercise?.adapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            exerciseOptions.map { it.second }
-        )
+        spinnerExercise?.adapter = darkSpinnerAdapter(exerciseOptions.map { it.second })
         spinnerMode = view.findViewById(R.id.spinner_mode)
-        spinnerMode?.adapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            modeOptions.map { it.second }
-        )
+        spinnerMode?.adapter = darkSpinnerAdapter(modeOptions.map { it.second })
         spinnerMode?.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
                 trainingMode = modeOptions.getOrNull(position)?.first ?: "complete"
@@ -529,6 +517,12 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
             }
         }
     }
+
+    /** 深色训练页用: 白字 spinner adapter (默认黑字在深底上看不清). */
+    private fun darkSpinnerAdapter(items: List<String>): ArrayAdapter<String> =
+        ArrayAdapter(requireContext(), R.layout.spinner_item_dark, items).also {
+            it.setDropDownViewResource(R.layout.spinner_dropdown_item_dark)
+        }
 
     private fun resetTrainingUI() {
         isTraining = false
