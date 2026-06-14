@@ -202,6 +202,32 @@ class ProfileFragment : Fragment() {
                 addView(cardView)
             }
 
+            // ===== 设置开关: 训练后自动 AI 分析 =====
+            UiKit.card(ctx).let { (cardView, inner) ->
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                }
+                val col = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                col.addView(UiKit.cardTitle(ctx, "训练后自动 AI 分析"))
+                col.addView(UiKit.caption(ctx, "关闭后, 完整运动结束可手动点“让 AI 教练分析”"))
+                row.addView(col)
+                val prefs = ctx.getSharedPreferences("sf_prefs", android.content.Context.MODE_PRIVATE)
+                val sw = android.widget.Switch(ctx).apply {
+                    isChecked = prefs.getBoolean("auto_ai_report", false)
+                    setOnCheckedChangeListener { _, checked ->
+                        prefs.edit().putBoolean("auto_ai_report", checked).apply()
+                    }
+                }
+                row.addView(sw)
+                inner.addView(row)
+                addView(cardView)
+            }
+
             // ===== 数据横排: 本周打卡 + 体重 =====
             val dataRow = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL

@@ -299,24 +299,16 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
                     ApiClient.service.trainingStop(TrainingStopRequest(deviceId = devId))
                 }
                 val sid = trainingSessionId
-                if (trainingMode == "complete" && !sid.isNullOrEmpty()) {
-                    // 模式2 完整运动: 出 AI 训练报告 (结合本次+历史)
+                val autoReport = requireContext()
+                    .getSharedPreferences("sf_prefs", android.content.Context.MODE_PRIVATE)
+                    .getBoolean("auto_ai_report", false)
+                val canReport = trainingMode == "complete" && !sid.isNullOrEmpty()
+                if (canReport && autoReport) {
+                    // 完整运动 + 已开启自动: 直接出 AI 报告
                     resetTrainingUI()
-                    val loading = MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("AI 教练分析中")
-                        .setMessage("正在分析本次训练并对照历史… (约 30 秒)")
-                        .setCancelable(true).show()
-                    val report = withContext(Dispatchers.IO) {
-                        try { ApiClient.service.workoutReport(
-                            com.smartfitness.app.model.WorkoutReportRequest(sessionId = sid)) }
-                        catch (e: Exception) { null }
-                    }
-                    if (isAdded) {
-                        loading.dismiss()
-                        showReportSheet(exKey, maxReps, durSec.toLong(), avgForm, report)
-                    }
+                    runWorkoutReport(sid!!, exKey, maxReps, durSec.toLong(), avgForm)
                 } else {
-                    // 模式1 指导动作: 简要总结即可 (逐次矫正训练中已实时给过)
+                    // 否则: 简要总结; 完整运动可按需手动让 AI 分析
                     val summary = withContext(Dispatchers.IO) {
                         try {
                             ApiClient.service.workoutSummary(
@@ -328,12 +320,34 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
                         } catch (e: Exception) { null }
                     }
                     resetTrainingUI()
-                    showSummaryDialog(exKey, maxReps, durSec.toLong(), avgForm, summary)
+                    val onAnalyze: (() -> Unit)? = if (canReport) {
+                        { runWorkoutReport(sid!!, exKey, maxReps, durSec.toLong(), avgForm) }
+                    } else null
+                    showSummaryDialog(exKey, maxReps, durSec.toLong(), avgForm, summary, onAnalyze)
                 }
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Stop failed: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 btnToggle?.isEnabled = true
+            }
+        }
+    }
+
+    /** 调 AI 教练分析本次训练并弹报告 (loading → workout_report → 报告 BottomSheet). */
+    private fun runWorkoutReport(sid: String, exKey: String, reps: Int, durS: Long, avgForm: Double?) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val loading = MaterialAlertDialogBuilder(requireContext())
+                .setTitle("AI 教练分析中")
+                .setMessage("正在分析本次训练并对照历史… (约 30 秒)")
+                .setCancelable(true).show()
+            val report = withContext(Dispatchers.IO) {
+                try { ApiClient.service.workoutReport(
+                    com.smartfitness.app.model.WorkoutReportRequest(sessionId = sid)) }
+                catch (e: Exception) { null }
+            }
+            if (isAdded) {
+                loading.dismiss()
+                showReportSheet(exKey, reps, durS, avgForm, report)
             }
         }
     }
@@ -619,7 +633,8 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         reps: Int,
         durationS: Long,
         avgForm: Double?,
-        summary: com.smartfitness.app.model.WorkoutSummaryResponse?
+        summary: com.smartfitness.app.model.WorkoutSummaryResponse?,
+        onAnalyze: (() -> Unit)? = null
     ) {
         val mm = durationS / 60
         val ss = durationS % 60
@@ -638,14 +653,15 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
             if (badges.isNotEmpty()) append("\n\nBadges: $badges")
         }
 
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Workout Summary")
+        val b = MaterialAlertDialogBuilder(requireContext())
+            .setTitle("训练总结")
             .setMessage(msg)
-            .setPositiveButton("Done", null)
-            .setNeutralButton("Share") { _, _ ->
-                Toast.makeText(requireContext(), "Share coming soon", Toast.LENGTH_SHORT).show()
-            }
-            .show()
+            .setPositiveButton("完成", null)
+        if (onAnalyze != null) {
+            // 完整运动但未开启自动分析: 提供按需让 AI 教练分析
+            b.setNeutralButton("🧠 让 AI 教练分析") { _, _ -> onAnalyze() }
+        }
+        b.show()
     }
 
     private fun autoConnectCoachIfNeeded() {
