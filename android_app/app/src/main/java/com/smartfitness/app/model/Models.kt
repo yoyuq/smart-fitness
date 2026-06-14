@@ -346,7 +346,8 @@ data class TrainingStartRequest(
     val exercise: String,
     @SerializedName("user_id") val userId: Long? = null,
     val source: String? = null,
-    @SerializedName("session_id") val sessionId: String? = null
+    @SerializedName("session_id") val sessionId: String? = null,
+    val mode: String? = null   // guidance(指导动作) | complete(完整运动)
 )
 
 data class TrainingStopRequest(
@@ -364,6 +365,8 @@ data class TrainingActiveItem(
 data class TrainingStartResponse(
     val ok: Boolean = false,
     val active: TrainingActiveItem? = null,
+    @SerializedName("session_id") val sessionId: String? = null,
+    val mode: String? = null,
     val error: String? = null
 )
 
@@ -524,4 +527,36 @@ data class CoachMemoryListResponse(
 data class CoachMemoryAddRequest(
     val note: String,
     val category: String = "general",
+)
+
+// =============================================================
+// Workout Report (mode 2 完整运动报告) - 2026-06-14
+// =============================================================
+data class WorkoutReportRequest(
+    @com.google.gson.annotations.SerializedName("session_id") val sessionId: String
+)
+
+data class WorkoutReport(
+    val summary: String? = null,
+    val highlights: String? = null,
+    val problems: String? = null,
+    @com.google.gson.annotations.SerializedName("vs_history") val vsHistory: String? = null,
+    val recommendations: List<String>? = null,
+    val encouragement: String? = null
+)
+
+data class WorkoutReportSession(
+    val exercise: String? = null,
+    @com.google.gson.annotations.SerializedName("total_reps") val totalReps: Int? = null,
+    @com.google.gson.annotations.SerializedName("avg_score") val avgScore: Double? = null,
+    @com.google.gson.annotations.SerializedName("duration_min") val durationMin: Double? = null,
+    val issues: List<String>? = null
+)
+
+data class WorkoutReportResponse(
+    val ok: Boolean = false,
+    val report: WorkoutReport? = null,
+    @com.google.gson.annotations.SerializedName("report_text") val reportText: String? = null,
+    val session: WorkoutReportSession? = null,
+    val error: String? = null
 )

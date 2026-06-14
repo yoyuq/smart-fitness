@@ -127,6 +127,10 @@ interface ApiService {
     @POST("api/v2/ai/coach_review")
     suspend fun coachReview(): CoachReviewResponse
 
+    // ---------- 完整运动报告 (模式2, 2026-06-14) ----------
+    @POST("api/v2/ai/workout_report")
+    suspend fun workoutReport(@Body req: com.smartfitness.app.model.WorkoutReportRequest): com.smartfitness.app.model.WorkoutReportResponse
+
     @GET("api/v2/ai/memory")
     suspend fun coachMemories(): CoachMemoryListResponse
 

@@ -17,6 +17,7 @@ import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.ArrayAdapter
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -102,6 +103,11 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
     private var trainingStartMs = 0L
     private var trainingDeviceId: String? = null
     private var trainingExerciseKey: String? = null
+    private var trainingSessionId: String? = null
+    private var trainingMode: String = "complete"   // guidance(指导动作) | complete(完整运动)
+    private var spinnerMode: Spinner? = null
+    // (key, 中文标签)
+    private val modeOptions = listOf("complete" to "完整运动", "guidance" to "指导动作")
 
     private var lastReps = 0
     private var lastScore: Double? = null
@@ -166,6 +172,18 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
             android.R.layout.simple_spinner_dropdown_item,
             exerciseOptions.map { it.second }
         )
+        spinnerMode = view.findViewById(R.id.spinner_mode)
+        spinnerMode?.adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            modeOptions.map { it.second }
+        )
+        spinnerMode?.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                trainingMode = modeOptions.getOrNull(position)?.first ?: "complete"
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
         btnToggle?.setOnClickListener {
             if (isTraining) stopTraining() else startTraining()
         }
@@ -247,7 +265,8 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
                             deviceId = devId,
                             exercise = exKey,
                             userId = ApiClient.userId.takeIf { it > 0L },
-                            source = currentCameraSource.key
+                            source = currentCameraSource.key,
+                            mode = trainingMode
                         )
                     )
                 }
@@ -256,6 +275,8 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
                     trainingStartMs = System.currentTimeMillis()
                     trainingDeviceId = devId
                     trainingExerciseKey = exKey
+                    trainingSessionId = resp.sessionId
+                    spinnerMode?.isEnabled = false
                     lastReps = 0; maxReps = 0; lastScore = null
                     scoreSum = 0.0; scoreCount = 0
                     btnToggle?.text = "Stop"
@@ -289,22 +310,38 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
                 withContext(Dispatchers.IO) {
                     ApiClient.service.trainingStop(TrainingStopRequest(deviceId = devId))
                 }
-                // fetch summary
-                val summary = withContext(Dispatchers.IO) {
-                    try {
-                        ApiClient.service.workoutSummary(
-                            WorkoutSummaryRequest(
-                                deviceId = devId,
-                                exercise = exKey,
-                                reps = maxReps,
-                                durationS = durSec,
-                                avgFormScore = avgForm,
+                val sid = trainingSessionId
+                if (trainingMode == "complete" && !sid.isNullOrEmpty()) {
+                    // 模式2 完整运动: 出 AI 训练报告 (结合本次+历史)
+                    resetTrainingUI()
+                    val loading = MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("AI 教练分析中")
+                        .setMessage("正在分析本次训练并对照历史… (约 30 秒)")
+                        .setCancelable(true).show()
+                    val report = withContext(Dispatchers.IO) {
+                        try { ApiClient.service.workoutReport(
+                            com.smartfitness.app.model.WorkoutReportRequest(sessionId = sid)) }
+                        catch (e: Exception) { null }
+                    }
+                    if (isAdded) {
+                        loading.dismiss()
+                        showReportSheet(exKey, maxReps, durSec.toLong(), avgForm, report)
+                    }
+                } else {
+                    // 模式1 指导动作: 简要总结即可 (逐次矫正训练中已实时给过)
+                    val summary = withContext(Dispatchers.IO) {
+                        try {
+                            ApiClient.service.workoutSummary(
+                                WorkoutSummaryRequest(
+                                    deviceId = devId, exercise = exKey,
+                                    reps = maxReps, durationS = durSec, avgFormScore = avgForm,
+                                )
                             )
-                        )
-                    } catch (e: Exception) { null }
+                        } catch (e: Exception) { null }
+                    }
+                    resetTrainingUI()
+                    showSummaryDialog(exKey, maxReps, durSec.toLong(), avgForm, summary)
                 }
-                resetTrainingUI()
-                showSummaryDialog(exKey, maxReps, durSec.toLong(), avgForm, summary)
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Stop failed: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
@@ -503,7 +540,83 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         timerText?.text = "00:00"
         trainingDeviceId = null
         trainingExerciseKey = null
+        spinnerMode?.isEnabled = true
         // 保留骨架预览 (蓝半透明), 不清
+    }
+
+    /** 模式2: 完整运动 AI 报告 BottomSheet (总结/亮点/问题/历史对比/建议). */
+    private fun showReportSheet(
+        exKey: String, reps: Int, durationS: Long, avgForm: Double?,
+        resp: com.smartfitness.app.model.WorkoutReportResponse?
+    ) {
+        val ctx = requireContext()
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(ctx)
+        val scroll = android.widget.ScrollView(ctx)
+        val dp = { v: Int -> (ctx.resources.displayMetrics.density * v).toInt() }
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFFFFFFFF.toInt())
+            setPadding(dp(24), dp(20), dp(24), dp(24))
+        }
+        scroll.addView(box)
+        box.addView(View(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(4)).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL; bottomMargin = dp(12)
+            }
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(2).toFloat(); setColor(0xFFE0E0E0.toInt())
+            }
+        })
+        box.addView(TextView(ctx).apply {
+            text = "本次训练报告"; textSize = 22f
+            setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(0xFF14142B.toInt())
+        })
+        val mm = durationS / 60; val ss = durationS % 60
+        box.addView(TextView(ctx).apply {
+            text = "$exKey · $reps 次 · ${String.format("%02d:%02d", mm, ss)}" +
+                    (avgForm?.let { " · 均分 ${String.format("%.0f", it)}" } ?: "")
+            textSize = 13f; setTextColor(0xFF9094A6.toInt()); setPadding(0, dp(4), 0, dp(8))
+        })
+
+        val rep = resp?.report
+        fun section(title: String, body: String?) {
+            if (body.isNullOrBlank()) return
+            box.addView(TextView(ctx).apply {
+                text = title; textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(0xFF14142B.toInt())
+                setPadding(0, dp(12), 0, dp(2))
+            })
+            box.addView(TextView(ctx).apply {
+                text = body; textSize = 15f; setTextColor(0xFF2D2D2D.toInt()); setLineSpacing(0f, 1.2f)
+            })
+        }
+        if (rep != null) {
+            section("📊 总结", rep.summary)
+            section("✅ 亮点", rep.highlights)
+            section("🎯 待改进", rep.problems)
+            section("📈 对比历史", rep.vsHistory)
+            rep.recommendations?.takeIf { it.isNotEmpty() }?.let {
+                section("🗓 下次建议", it.joinToString("\n") { r -> "• $r" })
+            }
+            rep.encouragement?.let {
+                box.addView(TextView(ctx).apply {
+                    text = "🔥 $it"; textSize = 15f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(0xFFE67E22.toInt())
+                    setPadding(0, dp(12), 0, 0)
+                })
+            }
+        } else {
+            section("报告", resp?.reportText ?: "本次未生成报告 (可能动作太少或 AI 暂不可用)。")
+        }
+        box.addView(com.google.android.material.button.MaterialButton(ctx).apply {
+            text = "完成"; cornerRadius = dp(12)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(16) }
+            setOnClickListener { sheet.dismiss() }
+        })
+        sheet.setContentView(scroll)
+        sheet.show()
     }
 
 
