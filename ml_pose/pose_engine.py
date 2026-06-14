@@ -189,6 +189,25 @@ def check_pose_validity(vis_33, exercise=None):
     return (core_ok and req_ok), quality
 
 
+# ============ 体态匹配门禁 ============
+# 防止"做着深蹲却给俯卧撑计数": 俯卧撑/平板是趴姿(躯干接近水平, |torso_tilt| 大),
+# 其余动作是站姿(躯干竖直, |torso_tilt| 小). 体态与目标动作不符 → 不计数.
+_PRONE_EXERCISES = {"push_up", "plank"}     # 趴姿
+_PRONE_MIN_TILT = 50.0                       # 趴姿: |torso_tilt| 需 >= 此值
+_UPRIGHT_MAX_TILT = 62.0                     # 站姿: |torso_tilt| 需 <= 此值
+
+
+def posture_matches_exercise(angles, exercise) -> bool:
+    """该帧体态是否与目标动作一致 (趴/站). torso_tilt 缺失时放行(不误杀)."""
+    tilt = angles.get("torso_tilt") if angles else None
+    if tilt is None:
+        return True
+    a = abs(float(tilt))
+    if exercise in _PRONE_EXERCISES:
+        return a >= _PRONE_MIN_TILT
+    return a <= _UPRIGHT_MAX_TILT
+
+
 def apply_score_gate(score, feedback, valid, quality):
     """门禁后处理: 无效帧不给分; 低可见度封顶."""
     if not valid:

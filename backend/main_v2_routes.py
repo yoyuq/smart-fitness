@@ -450,10 +450,20 @@ async def v2_vision_infer_full(req: Request):
                             form_score, feedback = _pe.apply_score_gate(int(_score), _fb, pose_valid, vis_quality)
                     except Exception:
                         pass
+                    # 体态门禁: 人实际在做的动作(趴/站)要和目标动作一致, 否则不计数
+                    # (例如选俯卧撑却在做深蹲, 不应给俯卧撑加 reps)
+                    posture_ok = True
+                    try:
+                        import pose_engine as _pe2
+                        posture_ok = _pe2.posture_matches_exercise(angles, exercise_pred or raw_pred)
+                    except Exception:
+                        pass
+                    if not posture_ok:
+                        feedback = f"姿势与所选动作不符, 请按{exercise_pred}的姿态做"
                     # Rep counting: target exercise is fixed by the user's Spinner selection.
-                    # 无效帧 (人体不完整) 不参与计数, 防止幻觉关节虚计次数
+                    # 无效帧(人体不完整)或体态不符 不参与计数, 防止虚计次数
                     det = _get_detector(device_id or "default", exercise_pred)
-                    if det is not None and angles and pose_valid:
+                    if det is not None and angles and pose_valid and posture_ok:
                         det_angles = {
                             "left_knee": angles.get("knee_L"), "right_knee": angles.get("knee_R"),
                             "left_hip": angles.get("hip_L"), "right_hip": angles.get("hip_R"),

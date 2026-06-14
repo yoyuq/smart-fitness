@@ -51,3 +51,21 @@ def test_gate_good_quality_untouched():
     score, fb = pe.apply_score_gate(95, "标准!", valid=True, quality=0.9)
     assert score == 95
     assert fb == "标准!"
+
+
+def test_posture_squat_not_counted_as_pushup():
+    # 站立(深蹲)体态不应匹配俯卧撑目标 — 修"做深蹲给俯卧撑计数"的 bug
+    upright = {"torso_tilt": 12}
+    assert pe.posture_matches_exercise(upright, "squat") is True
+    assert pe.posture_matches_exercise(upright, "push_up") is False
+
+
+def test_posture_pushup_not_counted_as_squat():
+    prone = {"torso_tilt": 80}
+    assert pe.posture_matches_exercise(prone, "push_up") is True
+    assert pe.posture_matches_exercise(prone, "squat") is False
+
+
+def test_posture_missing_tilt_passes():
+    # torso_tilt 缺失时放行, 不误杀
+    assert pe.posture_matches_exercise({}, "push_up") is True
