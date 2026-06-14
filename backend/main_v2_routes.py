@@ -287,6 +287,10 @@ async def v2_train_start(req: Request):
             pass
     # 兼容 APP 字段名: exercise / exercise_type
     exercise = (body.get("exercise") or body.get("exercise_type") or "squat").strip() or "squat"
+    # 模式: guidance(指导动作-逐次实时矫正) | complete(完整运动-结束出报告). 默认 complete
+    mode = (body.get("mode") or "complete").strip().lower()
+    if mode not in ("guidance", "complete"):
+        mode = "complete"
     if not device_id or not user_id:
         return JSONResponse({"ok": False, "error": "device_id and user_id required"}, status_code=400)
     session_id = f"sess_{user_id}_{int(time.time())}"
@@ -295,6 +299,7 @@ async def v2_train_start(req: Request):
         "exercise": exercise,
         "session_id": session_id,
         "started_at": time.time(),
+        "mode": mode,
     }
     # Reset per-device rep counter when a workout starts.
     try:
@@ -305,8 +310,8 @@ async def v2_train_start(req: Request):
             det.set_target_exercise(exercise)
     except Exception as e:
         log.warning(f"detector reset failed: {e}")
-    log.info(f"training start device={device_id} user={user_id} exercise={exercise} sid={session_id}")
-    return JSONResponse({"ok": True, "session_id": session_id, "exercise": exercise})
+    log.info(f"training start device={device_id} user={user_id} exercise={exercise} sid={session_id} mode={mode}")
+    return JSONResponse({"ok": True, "session_id": session_id, "exercise": exercise, "mode": mode})
 
 
 @app.post("/api/v2/training/stop")
@@ -664,6 +669,43 @@ async def v2_ai_plan(req: Request):
         res["ok"] = True
         return JSONResponse(res)
     return JSONResponse({"ok": True, "plans": res or []})
+
+
+@app.post("/api/v2/ai/workout_report")
+async def v2_ai_workout_report(req: Request):
+    """模式2: 对一次完整训练(session)出报告——本次表现 + 历史对比 + 建议, 存账号."""
+    user = _require_user(req)
+    if not user:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    body = await req.json()
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id required"}, status_code=400)
+    conn = get_db()
+    try:
+        res = ai_planner.workout_report(conn, user["user_id"], session_id)
+    finally:
+        conn.close()
+    return JSONResponse(res)
+
+
+@app.get("/api/v2/ai/workout_reports")
+async def v2_ai_workout_reports(req: Request):
+    """历史训练报告列表."""
+    user = _require_user(req)
+    if not user:
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    conn = get_db()
+    try:
+        ai_planner.ensure_workout_reports_table(conn)
+        rows = conn.execute(
+            "SELECT session_id, report_json, created_at FROM workout_reports "
+            "WHERE user_id=? ORDER BY id DESC LIMIT 20", (user["user_id"],)).fetchall()
+        out = [{"session_id": r[0], "data": json.loads(r[1]) if r[1] else None, "created_at": r[2]}
+               for r in rows]
+    finally:
+        conn.close()
+    return JSONResponse({"ok": True, "reports": out})
 
 
 @app.post("/api/v2/ai/coach_review")

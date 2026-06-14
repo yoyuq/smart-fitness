@@ -660,3 +660,135 @@ def coach_review(conn, user_id) -> Dict[str, Any]:
             except Exception as e:
                 log.warning(f"save coach memory failed: {e}")
     return {"ok": True, "review": review, "memory_saved": saved}
+
+
+# ============================================================
+# 完整运动报告 (模式2): 绑定一次刚结束的训练 session,
+# 聚合本次每个 rep 的表现 + 用户历史 + 教练记忆 → 结构化报告并落库.
+# ============================================================
+
+def ensure_workout_reports_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workout_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_id TEXT,
+            report_json TEXT,
+            created_at INTEGER
+        )""")
+    conn.commit()
+
+
+def _summarize_session_reps(conn, session_id):
+    """聚合本次 session 的 rep_scores: 分动作统计 + 高频问题."""
+    try:
+        rows = conn.execute(
+            "SELECT exercise, total, depth, control, symmetry, peak_angle, duration_s, feedback "
+            "FROM rep_scores WHERE session_id=? ORDER BY id", (session_id,)).fetchall()
+    except Exception:
+        rows = []
+    if not rows:
+        return {"reps": 0, "by_exercise": {}, "issues": []}
+    by_ex = {}
+    issues = {}
+    for r in rows:
+        ex = r[0] if not isinstance(r, sqlite3.Row) else r["exercise"]
+        total = r[1]; depth = r[2]; control = r[3]; symmetry = r[4]; fb = r[7]
+        d = by_ex.setdefault(ex, {"n": 0, "total": 0.0, "depth": 0.0, "control": 0.0, "symmetry": 0.0})
+        d["n"] += 1
+        d["total"] += total or 0; d["depth"] += depth or 0
+        d["control"] += control or 0; d["symmetry"] += symmetry or 0
+        if fb and fb != "漂亮, 标准动作!":
+            for part in str(fb).split(";"):
+                p = part.strip()
+                if p:
+                    issues[p] = issues.get(p, 0) + 1
+    for ex, d in by_ex.items():
+        n = max(d["n"], 1)
+        d["avg_total"] = round(d["total"] / n, 1)
+        d["avg_depth"] = round(d["depth"] / n, 1)
+        d["avg_control"] = round(d["control"] / n, 1)
+        d["avg_symmetry"] = round(d["symmetry"] / n, 1)
+        for k in ("total", "depth", "control", "symmetry"):
+            d.pop(k, None)
+    top_issues = sorted(issues.items(), key=lambda kv: -kv[1])[:5]
+    return {"reps": len(rows), "by_exercise": by_ex,
+            "issues": [f"{k}（{v}次）" for k, v in top_issues]}
+
+
+def workout_report(conn, user_id, session_id):
+    """模式2: 对一次完整训练生成报告 (结合历史 + 记忆), 落库 workout_reports."""
+    # 本次 session 基本信息
+    srow = conn.execute(
+        "SELECT exercise_type, total_reps, avg_form_score, start_time, end_time "
+        "FROM sessions WHERE session_id=? AND user_id=?",
+        (session_id, str(user_id))).fetchone()
+    if not srow:
+        srow = conn.execute(
+            "SELECT exercise_type, total_reps, avg_form_score, start_time, end_time "
+            "FROM sessions WHERE session_id=?", (session_id,)).fetchone()
+    if not srow:
+        return {"ok": False, "error": "找不到该训练记录"}
+    ex_type, total_reps, avg_form, st, et = (srow[0], srow[1], srow[2], srow[3], srow[4])
+    dur_min = round(((et or 0) - (st or 0)) / 60.0, 1) if (st and et) else None
+
+    rep_summary = _summarize_session_reps(conn, session_id)
+    ctx = _load_user_context(conn, user_id)
+    ctx_block = _build_user_context_block(ctx)
+
+    per_ex_lines = "; ".join(
+        f"{ex}: {d['n']}次 均分{d['avg_total']}(深度{d['avg_depth']}/控制{d['avg_control']}/对称{d['avg_symmetry']})"
+        for ex, d in rep_summary["by_exercise"].items()) or f"{ex_type} 共 {total_reps} 次"
+    issues_line = ", ".join(rep_summary["issues"]) or "无明显问题"
+
+    prompt = f"""{ctx_block}
+
+## 本次训练数据
+动作明细: {per_ex_lines}
+本次总次数: {total_reps}, 平均评分: {avg_form if avg_form is not None else '未评分'}, 时长: {dur_min}分钟
+本次高频问题: {issues_line}
+
+你是该用户的专属教练. 针对**这次刚结束的训练**, 结合其历史与你的记忆, 出一份训练报告.
+输出**纯 JSON 对象**(不要 markdown):
+{{
+  "summary": "本次训练一句话总览(动作/量/评分)",
+  "highlights": "本次做得好的点(具体)",
+  "problems": "本次最该改进的1-2个问题(基于高频问题)",
+  "vs_history": "与近期历史对比: 进步还是退步, 用具体数字",
+  "recommendations": ["下次训练的可执行建议, 每条含动作要点", "..."],
+  "encouragement": "一句个性化鼓励"
+}}
+要求: 全中文; 每字段≤80字; recommendations 2-4条; 数据不足的字段如实说明不编造."""
+    raw = _call_llm(
+        [{"role": "system", "content": SYSTEM_PROMPT_BASE + " 严格只输出 JSON 对象."},
+         {"role": "user", "content": prompt}],
+        max_tokens=3000, temperature=0.5,
+        chain=os.environ.get("AI_REPORT_CHAIN", "qwen,deepseek,volc-coding"),
+    )
+    report = None
+    if raw:
+        import re as _re
+        mm = _re.search(r"\{.*\}", raw, _re.S)
+        if mm:
+            try:
+                report = json.loads(mm.group(0))
+            except Exception:
+                report = None
+    session_brief = {
+        "exercise": ex_type, "total_reps": total_reps,
+        "avg_score": avg_form, "duration_min": dur_min,
+        "by_exercise": rep_summary["by_exercise"], "issues": rep_summary["issues"],
+    }
+    # 落库
+    try:
+        ensure_workout_reports_table(conn)
+        conn.execute(
+            "INSERT INTO workout_reports (user_id, session_id, report_json, created_at) VALUES (?,?,?,?)",
+            (user_id, session_id, json.dumps({"report": report, "session": session_brief},
+                                             ensure_ascii=False), int(time.time())))
+        conn.commit()
+    except Exception as e:
+        log.warning(f"workout_report save failed: {e}")
+    if report is None:
+        return {"ok": True, "report": None, "report_text": (raw or "").strip(), "session": session_brief}
+    return {"ok": True, "report": report, "session": session_brief}
