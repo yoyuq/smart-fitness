@@ -14,6 +14,7 @@ import ai_planner
 from . import state
 from .compact import compact_trace
 from .loop import respond_with_loop
+from .memory import add_run_summary_memory
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
@@ -56,6 +57,8 @@ def start_run(conn: sqlite3.Connection, user_id: int, message: str, mode: str = 
             todos=todos,
             pending_approval_ids=[p.get("approval_id") for p in pending if p.get("approval_id")],
         )
+        if status == "completed":
+            _maybe_add_run_summary_memory(conn, user_id, run_id, message, res.get("reply") or "", trace)
         state.append_event(conn, run_id, user_id, "assistant_final", {"status": status, "reply": res.get("reply")})
         res["run_id"] = run_id
         res["run_status"] = status
@@ -117,6 +120,8 @@ def resume_run_after_approval(
         pending_approval_ids=pending_ids,
         error=None if tool_result.get("ok") else {"type": "tool_failed", "message": str(tool_result.get("error") or tool_result)},
     )
+    if status == "completed" and tool_result.get("ok"):
+        _maybe_add_run_summary_memory(conn, user_id, run_id, run.get("user_message") or "", reply, trace)
     state.append_event(conn, run_id, user_id, "assistant_resume_final", {"status": status, "reply": reply})
     return {"ok": bool(tool_result.get("ok")), "resumed": True, "run_id": run_id, "run_status": status, "reply": reply, "trace": trace}
 
@@ -184,6 +189,34 @@ def _fallback_resume_reply(approval: Dict[str, Any], tool_result: Dict[str, Any]
     if tool_result.get("ok"):
         return f"已完成：{summary}。你可以在对应页面查看最新数据；如果要继续，我可以基于这次更新重新分析训练或调整计划。"
     return f"执行失败：{summary}。原因：{tool_result.get('error') or tool_result.get('message') or '未知错误'}"
+
+
+def _maybe_add_run_summary_memory(
+    conn: sqlite3.Connection,
+    user_id: int,
+    run_id: str,
+    user_message: str,
+    reply: str,
+    trace: List[Dict[str, Any]],
+) -> None:
+    """Persist a short run_summary for non-trivial completed runs.
+
+    This is a low-risk system memory: it records what the Agent did, not a new
+    user preference/fact. User facts still go through save_coach_memory approval.
+    """
+    tool_names = [str(t.get("name") or "") for t in (trace or []) if t.get("name")]
+    if not tool_names and len(user_message or "") < 30:
+        return
+    summary = (
+        f"用户请求：{(user_message or '').strip()[:120]}；"
+        f"Agent 使用工具：{', '.join(tool_names[:6]) or '无'}；"
+        f"最终回复：{(reply or '').strip()[:180]}"
+    )
+    try:
+        add_run_summary_memory(conn, user_id, run_id, summary, confidence=0.75)
+        state.append_event(conn, run_id, user_id, "memory_run_summary_saved", {"summary": summary})
+    except Exception as exc:
+        state.append_event(conn, run_id, user_id, "memory_run_summary_failed", {"error": str(exc)})
 
 
 def get_run(conn: sqlite3.Connection, user_id: int, run_id: str) -> Optional[Dict[str, Any]]:

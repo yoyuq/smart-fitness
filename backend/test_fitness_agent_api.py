@@ -190,3 +190,44 @@ def test_fitness_agent_context_compact_summarizes_old_history(monkeypatch):
         assert summary and summary["source_until_id"] > 0
     finally:
         conn.close()
+
+
+def test_fitness_agent_layered_memory_tool_requires_approval_and_groups(monkeypatch):
+    def fake_llm(messages, max_tokens=600, temperature=0.6, prefer=None, chain=None):
+        if "后端已经执行完毕" in messages[0]["content"]:
+            return '{"final":"已记住：用户偏好食堂高碳水饮品。"}'
+        if "工具结果" not in messages[-1]["content"]:
+            return '{"tool_calls":[{"name":"save_coach_memory","args":{"note":"用户偏好食堂高碳水饮品","kind":"diet"}}]}'
+        return '{"final":"我已准备保存这条饮食偏好，需要你确认。"}'
+
+    monkeypatch.setattr("ai_planner._call_llm", fake_llm)
+    token = auth.generate_token(_uid(), "agent_layered_memory_test")
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/api/v2/agent/chat", headers=headers, json={"message": "记住我喜欢高碳水饮品", "mode": "coach"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["run_status"] == "waiting_approval"
+    approval = data["pending_approvals"][0]
+    assert approval["tool_name"] == "save_coach_memory"
+    assert approval["args"]["kind"] == "diet"
+
+    ar = client.post(f"/api/v2/agent/approvals/{approval['approval_id']}/approve", headers=headers)
+    assert ar.status_code == 200
+    assert ar.json()["run_status"] == "completed"
+
+    import sqlite3
+    import fitness_agent
+    from main_v2_extra import DB_PATH
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        snapshot = fitness_agent.execute_tool(conn, int(auth.verify_token(token)["user_id"]), "get_memory_snapshot", {"limit_per_kind": 3})
+        assert snapshot["ok"] is True
+        diet_notes = snapshot["memory"]["by_kind"].get("diet") or []
+        assert any("高碳水" in m["note"] for m in diet_notes)
+        summaries = snapshot["memory"]["by_kind"].get("run_summary") or []
+        assert summaries  # completed run gets a lightweight run summary
+    finally:
+        conn.close()

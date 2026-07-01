@@ -34,7 +34,8 @@ def _protocol_section() -> str:
 - 如果用户已经明确要求“保存/创建/更新/删除/记录”用户数据，不要只在 final 里再次询问确认；必须直接发起对应写工具的 tool_calls。系统会自动弹出 App 审批，用户批准前不会真正写入。
 - 例如“把体重更新为56kg”必须调用 update_body_metrics；“创建/保存训练计划”必须调用 create_workout_plan；“记住/保存教练记忆”必须调用 save_coach_memory。
 - 对 3 步以上复杂任务，先调用 todo_write 列计划；执行中更新 todo 状态。
-- final 必须中文、具体、可执行；不要说“作为AI”。"""
+- final 必须中文、具体、可执行；不要说“作为AI”。
+- 长期记忆分层包括 goal/preference/injury/diet/training_pattern/observation/run_summary/general。保存用户事实时优先选择精确 kind；不要把伤病、饮食偏好、目标都塞进 general。"""
 
 
 def _knowledge_section() -> str:
@@ -45,7 +46,7 @@ def _knowledge_section() -> str:
 
 def _permission_section() -> str:
     return """需要用户确认的写工具：
-- save_coach_memory
+- save_coach_memory：保存分层长期记忆，kind/category 必须尽量使用 goal/preference/injury/diet/training_pattern/observation/run_summary/general
 - update_body_metrics
 - create_workout_plan
 - delete_workout_plan

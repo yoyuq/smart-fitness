@@ -13,6 +13,13 @@ from typing import Any, Dict, List, Optional
 
 import ai_planner
 from .knowledge_loader import knowledge_ids, search_knowledge
+from .memory import (
+    MEMORY_KINDS,
+    add_layered_memory,
+    build_memory_snapshot,
+    list_layered_memories,
+    normalize_memory_kind,
+)
 from .todos import run_todo_write
 from .web_search import search_fitness_web
 
@@ -50,8 +57,14 @@ TOOL_SPECS: List[Dict[str, Any]] = [
     },
     {
         "name": "get_coach_memory",
-        "description": "读取教练长期记忆。参数: limit 1-30。",
-        "args": {"limit": "int optional, default 10"},
+        "description": "按分层读取教练长期记忆。参数: limit 1-30, kinds 可选(goal/preference/injury/diet/training_pattern/observation/run_summary/general)。",
+        "args": {"limit": "int optional, default 10", "kinds": "list optional"},
+        "read_only": True,
+    },
+    {
+        "name": "get_memory_snapshot",
+        "description": "按 goal/preference/injury/diet/training_pattern/observation/run_summary/general 分组读取长期记忆摘要。参数: limit_per_kind 1-10。",
+        "args": {"limit_per_kind": "int optional, default 4"},
         "read_only": True,
     },
     {
@@ -75,8 +88,8 @@ TOOL_SPECS: List[Dict[str, Any]] = [
     },
     {
         "name": "save_coach_memory",
-        "description": "保存值得长期记住的用户目标、伤病、偏好或训练瓶颈。修改类工具，执行前必须获得用户确认。参数: note, category。",
-        "args": {"note": "string", "category": "goal|injury|preference|observation|general"},
+        "description": "保存分层长期记忆。修改类工具，执行前必须获得用户确认。参数: note, kind/category。kind 可为 goal/preference/injury/diet/training_pattern/observation/run_summary/general。",
+        "args": {"note": "string", "kind": "goal|preference|injury|diet|training_pattern|observation|run_summary|general", "category": "optional legacy alias"},
         "read_only": False,
         "requires_approval": True,
     },
@@ -105,7 +118,7 @@ TOOL_SPECS: List[Dict[str, Any]] = [
 
 
 _ALLOWED = {t["name"] for t in TOOL_SPECS}
-_CATEGORIES = {"goal", "injury", "preference", "observation", "general"}
+_CATEGORIES = set(MEMORY_KINDS)
 
 
 def _clamp_int(value: Any, default: int, lo: int, hi: int) -> int:
@@ -240,7 +253,15 @@ def execute_tool(conn: sqlite3.Connection, user_id: int, name: str, args: Option
 
     if name == "get_coach_memory":
         limit = _clamp_int(args.get("limit"), 10, 1, 30)
-        return {"ok": True, "memories": ai_planner.get_coach_memories(conn, user_id, limit=limit)}
+        raw_kinds = args.get("kinds") or args.get("kind") or []
+        if isinstance(raw_kinds, str):
+            raw_kinds = [raw_kinds]
+        kinds = [normalize_memory_kind(k) for k in raw_kinds if str(k).strip()] if isinstance(raw_kinds, list) else []
+        return {"ok": True, "memories": list_layered_memories(conn, user_id, kinds=kinds, limit=limit), "kinds": sorted(set(kinds))}
+
+    if name == "get_memory_snapshot":
+        limit_per_kind = _clamp_int(args.get("limit_per_kind"), 4, 1, 10)
+        return {"ok": True, "memory": build_memory_snapshot(conn, user_id, limit_per_kind=limit_per_kind)}
 
     if name == "search_fitness_kb":
         query = (args.get("query") or "").strip()
@@ -258,13 +279,20 @@ def execute_tool(conn: sqlite3.Connection, user_id: int, name: str, args: Option
 
     if name == "save_coach_memory":
         note = (args.get("note") or "").strip()
-        category = (args.get("category") or "general").strip()
-        if category not in _CATEGORIES:
-            category = "general"
+        category = (args.get("kind") or args.get("category") or "general").strip()
         if len(note) < 4:
             return {"ok": False, "error": "note too short"}
-        ai_planner.add_coach_memory(conn, user_id, note[:200], category=category)
-        return {"ok": True, "saved": {"category": category, "note": note[:200]}}
+        saved = add_layered_memory(
+            conn,
+            user_id,
+            note,
+            kind=category,
+            source="approved_tool",
+            confidence=0.95,
+            run_id=args.get("run_id"),
+            metadata={"tool": "save_coach_memory"},
+        )
+        return {"ok": True, "saved": saved}
 
     if name == "update_body_metrics":
         vals = {

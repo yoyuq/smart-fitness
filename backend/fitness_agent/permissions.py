@@ -106,7 +106,8 @@ def create_approval(conn: sqlite3.Connection, user_id: int, tool_name: str, args
 
 def summarize_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
     if tool_name == "save_coach_memory":
-        return f"保存教练记忆：{args.get('note', '')}"
+        kind = args.get("kind") or args.get("category") or "general"
+        return f"保存教练记忆[{kind}]：{args.get('note', '')}"
     if tool_name == "update_body_metrics":
         parts = []
         if args.get("weight_kg") is not None:

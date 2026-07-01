@@ -17,7 +17,6 @@ from fastapi.responses import JSONResponse
 
 import auth
 import fitness_agent
-from fitness_agent.compact import prepare_llm_history_with_summary
 from main import app
 
 log = logging.getLogger("v2_extra")
@@ -476,7 +475,7 @@ async def x_fitness_agent_chat(req: Request):
         # Persist user/assistant turns on the server side so switching App tabs,
         # fragment recreation, or App restart does not erase Agent context.
         recent_history = fitness_agent.get_agent_chat_history(c, u["user_id"], limit=20)
-        compact_history = prepare_llm_history_with_summary(c, u["user_id"], recent_history, recent_limit=10)
+        compact_history = fitness_agent.prepare_llm_history_with_summary(c, u["user_id"], recent_history, recent_limit=10)
         fitness_agent.add_agent_chat_message(c, u["user_id"], "user", message, mode=mode)
         res = fitness_agent.start_run(
             c,
@@ -632,7 +631,7 @@ async def x_fitness_agent_nutrition(req: Request):
     try:
         msg = f"帮我规划饮食，先给各类营养目标量，再给具体食堂三餐和加餐建议。目标: {goal}"
         recent_history = fitness_agent.get_agent_chat_history(c, u["user_id"], limit=20)
-        compact_history = prepare_llm_history_with_summary(c, u["user_id"], recent_history, recent_limit=10)
+        compact_history = fitness_agent.prepare_llm_history_with_summary(c, u["user_id"], recent_history, recent_limit=10)
         fitness_agent.add_agent_chat_message(c, u["user_id"], "user", msg, mode="nutrition")
         res = fitness_agent.start_run(
             c,

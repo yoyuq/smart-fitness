@@ -15,6 +15,7 @@ fitness_agent/
 ├── loop.py              # Agent Loop：LLM -> tool_calls -> tool_results -> final
 ├── prompts.py           # system prompt 分段组装，避免大 f-string
 ├── compact.py           # s08 风格上下文压缩：旧聊天摘要 + trace 压缩
+├── memory.py            # 分层长期记忆：goal/preference/injury/diet/training_pattern/observation/run_summary
 ├── knowledge_loader.py  # s07 风格按需知识加载，只允许注册 id
 ├── web_search.py        # 受控联网搜索，LLM guard 判断是否属于健身知识
 ├── knowledge/           # markdown 知识库 + index.json 目录
@@ -75,6 +76,7 @@ knowledge/
 - `get_exercise_summary`
 - `get_active_plans`
 - `get_coach_memory`
+- `get_memory_snapshot`
 - `search_fitness_kb`
 - `search_fitness_web`
 
@@ -173,6 +175,28 @@ AI_AGENT_WEB_SEARCH_MAX_RESULTS=5
 AI_AGENT_WEB_SEARCH_TIMEOUT=8
 ```
 
+## Memory 分层
+
+`memory.py` 继续兼容原 `coach_memory` 表，同时补充这些列：
+
+- `kind`：`goal` / `preference` / `injury` / `diet` / `training_pattern` / `observation` / `run_summary` / `general`
+- `source`：记忆来源，例如 `approved_tool`、`run_summary`
+- `confidence`：0~1 置信度
+- `active`：软删除/停用标记，默认 1
+- `run_id`：关联 Agent run
+- `metadata_json`：扩展元数据
+
+读取：
+
+- `get_coach_memory(limit, kinds)`：按 kind 过滤读取。
+- `get_memory_snapshot(limit_per_kind)`：按 kind 分组读取摘要。
+
+写入：
+
+- 用户事实、目标、伤病、偏好、饮食、训练模式等长期记忆仍通过 `save_coach_memory`，必须走 App 审批。
+- `run_summary` 是低风险运行摘要，只记录“用户请求 / 工具 / 最终回复”，用于下次理解上下文，不代表新的用户事实。
+- 旧表已有 `category` 会迁移/映射到 `kind`，不破坏旧接口。
+
 ## Context Compact
 
 当前第一版上下文压缩包含：
@@ -186,9 +210,9 @@ AI_AGENT_WEB_SEARCH_TIMEOUT=8
 
 ## 下一阶段
 
-1. Context Compact：旧聊天和旧 run 只保留摘要，工具结果限长。
-2. Memory：把 coach memory 分成 goal/injury/preference/observation/run_summary。
-3. Error Recovery：JSON 解析失败、工具失败、超时、max turns reached 分策略恢复。
+1. Error Recovery：JSON 解析失败、工具失败、超时、max turns reached 分策略恢复。
+2. Tool Registry：把工具 schema/权限级别/分类从 `tools.py` 拆出去。
+3. App UI：展示 run 状态、todo、工具调用进度、联网搜索来源。
 4. Background/Cron：周报、周计划建议、连续未训练提醒，默认只提醒不自动修改数据。
 
 ## 验证命令
@@ -196,6 +220,6 @@ AI_AGENT_WEB_SEARCH_TIMEOUT=8
 在 `backend` 目录执行：
 
 ```powershell
-python -m py_compile fitness_agent\knowledge_loader.py fitness_agent\web_search.py fitness_agent\compact.py fitness_agent\state.py fitness_agent\prompts.py fitness_agent\todos.py fitness_agent\runtime.py fitness_agent\loop.py fitness_agent\tools.py fitness_agent\permissions.py fitness_agent\hooks.py fitness_agent\registry.py fitness_agent\__init__.py main_v2_extra.py
+python -m py_compile fitness_agent\knowledge_loader.py fitness_agent\web_search.py fitness_agent\compact.py fitness_agent\memory.py fitness_agent\state.py fitness_agent\prompts.py fitness_agent\todos.py fitness_agent\runtime.py fitness_agent\loop.py fitness_agent\tools.py fitness_agent\permissions.py fitness_agent\hooks.py fitness_agent\registry.py fitness_agent\__init__.py main_v2_extra.py
 python -m pytest test_fitness_agent_api.py -q
 ```

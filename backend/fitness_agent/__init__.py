@@ -1,4 +1,4 @@
-﻿"""Smart Fitness 专属健身 Agent 包。
+"""Smart Fitness 专属健身 Agent 包。
 
 对外保持旧接口兼容：
 - detect_domains(message)
@@ -21,8 +21,6 @@ from .compact import (
     prepare_llm_history_with_summary,
     summarize_chat_history,
 )
-from .knowledge_loader import load_catalog, public_catalog, search_knowledge
-from .web_search import search_fitness_web
 from .history import (
     add_agent_chat_message,
     delete_agent_chat_history,
@@ -31,7 +29,17 @@ from .history import (
     to_llm_history,
 )
 from .hooks import clear_hooks, register_default_hooks, register_hook, trigger_hooks
+from .knowledge_loader import load_catalog, public_catalog, search_knowledge
 from .loop import respond_with_loop
+from .memory import (
+    MEMORY_KINDS,
+    add_layered_memory,
+    build_memory_snapshot,
+    ensure_memory_schema,
+    list_layered_memories,
+    list_memories_by_kind,
+    normalize_memory_kind,
+)
 from .permissions import (
     check_permission,
     create_approval,
@@ -40,10 +48,11 @@ from .permissions import (
     list_pending_approvals,
     mark_approval,
 )
+from .registry import AGENT_DOMAINS, get_domain_catalog
 from .runtime import get_run, list_runs, resume_run_after_approval, resume_run_after_denial, start_run
 from .state import ensure_agent_state_schema
-from .registry import AGENT_DOMAINS, get_domain_catalog
 from .tools import TOOL_SPECS, execute_tool
+from .web_search import search_fitness_web
 
 # Keep the old public API name, but route chat through the new safe tool loop.
 respond = respond_with_loop
@@ -51,8 +60,11 @@ respond = respond_with_loop
 __all__ = [
     "AGENT_DOMAINS",
     "INTENT_KEYWORDS",
+    "MEMORY_KINDS",
     "TOOL_SPECS",
     "add_agent_chat_message",
+    "add_layered_memory",
+    "build_memory_snapshot",
     "check_permission",
     "clear_hooks",
     "compact_trace",
@@ -60,24 +72,26 @@ __all__ = [
     "delete_agent_chat_history",
     "detect_domains",
     "ensure_agent_chat_schema",
-    "ensure_permission_schema",
     "ensure_agent_state_schema",
     "ensure_context_schema",
+    "ensure_memory_schema",
+    "ensure_permission_schema",
     "execute_tool",
     "get_agent_chat_history",
     "get_approval",
     "get_context_summary",
     "get_domain_catalog",
     "get_run",
+    "list_layered_memories",
+    "list_memories_by_kind",
+    "list_pending_approvals",
     "list_runs",
     "load_catalog",
-    "search_knowledge",
-    "search_fitness_web",
-    "summarize_chat_history",
-    "list_pending_approvals",
     "mark_approval",
+    "normalize_memory_kind",
     "nutrition_plan",
     "prepare_llm_history_with_summary",
+    "public_catalog",
     "register_default_hooks",
     "register_hook",
     "respond",
@@ -85,7 +99,10 @@ __all__ = [
     "respond_with_loop",
     "resume_run_after_approval",
     "resume_run_after_denial",
+    "search_fitness_web",
+    "search_knowledge",
     "start_run",
+    "summarize_chat_history",
     "to_llm_history",
     "trigger_hooks",
 ]
