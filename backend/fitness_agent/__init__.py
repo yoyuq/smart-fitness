@@ -1,0 +1,91 @@
+﻿"""Smart Fitness 专属健身 Agent 包。
+
+对外保持旧接口兼容：
+- detect_domains(message)
+- respond(conn, user_id, message, mode="auto", history=None)
+- nutrition_plan(conn, user_id, goal=...)
+- INTENT_KEYWORDS
+
+以后给 Agent 加能力，优先改这个目录里的文件，不要把逻辑继续塞进 main_v2_extra.py。
+"""
+from .core import (
+    INTENT_KEYWORDS,
+    detect_domains,
+    nutrition_plan,
+    respond as respond_once,
+)
+from .compact import (
+    compact_trace,
+    ensure_context_schema,
+    get_context_summary,
+    prepare_llm_history_with_summary,
+    summarize_chat_history,
+)
+from .knowledge_loader import load_catalog, public_catalog, search_knowledge
+from .web_search import search_fitness_web
+from .history import (
+    add_agent_chat_message,
+    delete_agent_chat_history,
+    ensure_agent_chat_schema,
+    get_agent_chat_history,
+    to_llm_history,
+)
+from .hooks import clear_hooks, register_default_hooks, register_hook, trigger_hooks
+from .loop import respond_with_loop
+from .permissions import (
+    check_permission,
+    create_approval,
+    ensure_permission_schema,
+    get_approval,
+    list_pending_approvals,
+    mark_approval,
+)
+from .runtime import get_run, list_runs, resume_run_after_approval, resume_run_after_denial, start_run
+from .state import ensure_agent_state_schema
+from .registry import AGENT_DOMAINS, get_domain_catalog
+from .tools import TOOL_SPECS, execute_tool
+
+# Keep the old public API name, but route chat through the new safe tool loop.
+respond = respond_with_loop
+
+__all__ = [
+    "AGENT_DOMAINS",
+    "INTENT_KEYWORDS",
+    "TOOL_SPECS",
+    "add_agent_chat_message",
+    "check_permission",
+    "clear_hooks",
+    "compact_trace",
+    "create_approval",
+    "delete_agent_chat_history",
+    "detect_domains",
+    "ensure_agent_chat_schema",
+    "ensure_permission_schema",
+    "ensure_agent_state_schema",
+    "ensure_context_schema",
+    "execute_tool",
+    "get_agent_chat_history",
+    "get_approval",
+    "get_context_summary",
+    "get_domain_catalog",
+    "get_run",
+    "list_runs",
+    "load_catalog",
+    "search_knowledge",
+    "search_fitness_web",
+    "summarize_chat_history",
+    "list_pending_approvals",
+    "mark_approval",
+    "nutrition_plan",
+    "prepare_llm_history_with_summary",
+    "register_default_hooks",
+    "register_hook",
+    "respond",
+    "respond_once",
+    "respond_with_loop",
+    "resume_run_after_approval",
+    "resume_run_after_denial",
+    "start_run",
+    "to_llm_history",
+    "trigger_hooks",
+]

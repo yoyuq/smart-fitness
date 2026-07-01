@@ -206,6 +206,68 @@ data class ExerciseSummaryResponse(
     @SerializedName("by_type") val byType: List<ExerciseSummaryByType> = emptyList()
 )
 
+data class TrainingDataResponse(
+    val ok: Boolean,
+    val period: String = "week",
+    val since: Double = 0.0,
+    val summary: TrainingDataSummary = TrainingDataSummary(),
+    @SerializedName("by_type") val byType: List<ExerciseSummaryByType> = emptyList(),
+    val sessions: List<TrainingDataSession> = emptyList(),
+    val error: String? = null
+)
+
+data class TrainingDataSummary(
+    @SerializedName("sessions_count") val sessionsCount: Int = 0,
+    @SerializedName("total_reps") val totalReps: Int = 0,
+    @SerializedName("total_minutes") val totalMinutes: Double = 0.0,
+    @SerializedName("avg_score") val avgScore: Double = 0.0
+)
+
+data class TrainingDataSession(
+    @SerializedName("session_id") val sessionId: String = "",
+    @SerializedName("device_id") val deviceId: String? = null,
+    @SerializedName("exercise_type") val exerciseType: String? = null,
+    @SerializedName("start_time") val startTime: Double = 0.0,
+    @SerializedName("end_time") val endTime: Double? = null,
+    @SerializedName("total_reps") val totalReps: Int = 0,
+    @SerializedName("avg_form_score") val avgFormScore: Double? = null,
+    val status: String? = null,
+    @SerializedName("rep_count") val repCount: Int = 0,
+    @SerializedName("has_images") val hasImages: Boolean = false,
+    val reps: List<TrainingRep> = emptyList()
+)
+
+data class TrainingRep(
+    val id: Long = 0,
+    @SerializedName("session_id") val sessionId: String? = null,
+    @SerializedName("rep_index") val repIndex: Int? = null,
+    val exercise: String? = null,
+    val total: Double? = null,
+    val depth: Double? = null,
+    val control: Double? = null,
+    val symmetry: Double? = null,
+    @SerializedName("peak_angle") val peakAngle: Double? = null,
+    @SerializedName("duration_s") val durationS: Double? = null,
+    val feedback: String? = null,
+    val ts: Double? = null,
+    @SerializedName("true_label") val trueLabel: String? = null,
+    @SerializedName("error_type") val errorType: String? = null,
+    @SerializedName("has_images") val hasImages: Boolean = false,
+    @SerializedName("image_count") val imageCount: Int = 0,
+    val keyframes: List<String> = emptyList()
+)
+
+
+data class TrainingRepImageResponse(
+    val ok: Boolean,
+    val rep: TrainingRep? = null,
+    val keyframes: List<String> = emptyList(),
+    val frames: List<String> = emptyList(),
+    @SerializedName("frame_count") val frameCount: Int = 0,
+    @SerializedName("has_images") val hasImages: Boolean = false,
+    val error: String? = null
+)
+
 // ---------------- D-05 Device Bind ----------------
 data class BindDeviceRequest(
     @SerializedName("device_id") val deviceId: String,
@@ -490,6 +552,74 @@ data class AiPlanDay(
     @com.google.gson.annotations.SerializedName("target_reps") val targetReps: Int = 0,
     @com.google.gson.annotations.SerializedName("target_sets") val targetSets: Int = 0,
     @com.google.gson.annotations.SerializedName("intensity_note") val intensityNote: String? = null,
+)
+
+data class AgentChatRequest(
+    val message: String,
+    val mode: String = "auto",
+    val history: List<AgentChatMessage> = emptyList()
+)
+
+data class AgentNutritionPlanRequest(
+    val goal: String = "维持训练表现并优化体成分"
+)
+
+data class AgentChatMessage(
+    val role: String,
+    val content: String
+)
+
+data class AgentChatHistoryMessage(
+    val id: Long = 0,
+    val role: String = "user",
+    val content: String = "",
+    val mode: String = "auto",
+    val domains: List<String> = emptyList(),
+    @SerializedName("created_at") val createdAt: Long? = null
+)
+
+data class AgentChatHistoryResponse(
+    val ok: Boolean = false,
+    val messages: List<AgentChatHistoryMessage> = emptyList(),
+    val error: String? = null
+)
+
+data class AgentToolApproval(
+    @SerializedName("approval_id") val approvalId: String = "",
+    @SerializedName("tool_name") val toolName: String = "",
+    val args: Map<String, Any?> = emptyMap(),
+    val reason: String = "",
+    val status: String = "pending",
+    val summary: String = "",
+    @SerializedName("created_at") val createdAt: Long? = null
+)
+
+data class AgentApprovalListResponse(
+    val ok: Boolean = false,
+    val approvals: List<AgentToolApproval> = emptyList(),
+    val error: String? = null
+)
+
+data class AgentApprovalActionResponse(
+    val ok: Boolean = false,
+    @SerializedName("approval_id") val approvalId: String? = null,
+    val result: Map<String, Any?>? = null,
+    val message: String? = null,
+    val error: String? = null,
+    val reply: String? = null,
+    @SerializedName("run_id") val runId: String? = null,
+    @SerializedName("run_status") val runStatus: String? = null
+)
+
+data class AgentChatResponse(
+    val ok: Boolean = false,
+    val mode: String? = null,
+    val domains: List<String> = emptyList(),
+    val reply: String? = null,
+    @SerializedName("pending_approvals") val pendingApprovals: List<AgentToolApproval> = emptyList(),
+    @SerializedName("run_id") val runId: String? = null,
+    @SerializedName("run_status") val runStatus: String? = null,
+    val error: String? = null
 )
 
 // =============================================================

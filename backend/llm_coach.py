@@ -8,6 +8,12 @@ import os, json, time, hashlib, threading, logging
 from typing import Optional, Dict, List, Any
 
 try:
+    from fitness_agent.config import load_agent_env
+    load_agent_env()
+except Exception:
+    pass
+
+try:
     import requests
 except ImportError:
     requests = None

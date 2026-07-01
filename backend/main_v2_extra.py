@@ -10,12 +10,14 @@
   /api/v2/devices/bind (POST), /bindings (GET), /bind/{device_id} (DELETE)
   /api/v2/vision/infer (POST - 简版, /full 已在 main_v2_routes)
 """
-import os, json, time, uuid, secrets, base64, logging
+import os, json, time, uuid, secrets, base64, logging, calendar
 from typing import Optional, Dict, Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 import auth
+import fitness_agent
+from fitness_agent.compact import prepare_llm_history_with_summary
 from main import app
 
 log = logging.getLogger("v2_extra")
@@ -38,6 +40,53 @@ def _user(req: Request) -> Optional[Dict]:
 
 def _unauth():
     return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+
+def _rep_image_urls(row: Dict[str, Any], include_frames: bool = True) -> Dict[str, Any]:
+    """Build public /repdata URLs for one rep's saved keyframes/clip frames."""
+    keyframes = []
+    for key in ("start_frame", "peak_frame", "end_frame"):
+        v = row.get(key)
+        if not v:
+            continue
+        p = str(v).replace("\\", "/")
+        idx = p.find("data/")
+        keyframes.append("/repdata/" + p[idx + 5:] if idx >= 0 else p)
+
+    frames = []
+    frame_count = 0
+    clip_dir = row.get("clip_dir")
+    if clip_dir:
+        p = str(clip_dir).replace("\\", "/")
+        idx = p.find("data/")
+        if idx >= 0:
+            sub = p[idx + 5:]
+            d = os.path.join(ROOT, p[idx:])
+        else:
+            sub = p
+            d = os.path.join(ROOT, p)
+        if os.path.isdir(d):
+            names = [fn for fn in sorted(os.listdir(d)) if fn.lower().endswith((".jpg", ".jpeg", ".png"))]
+            frame_count = len(names)
+            if include_frames:
+                frames = [f"/repdata/{sub}/{fn}" for fn in names]
+    return {"keyframes": keyframes, "frames": frames, "frame_count": frame_count, "has_images": bool(keyframes or frame_count)}
+
+
+def _period_since(period: str) -> float:
+    """Return local-period start timestamp for day/week/month/year."""
+    period = (period or "week").lower()
+    now = time.time()
+    lt = time.localtime(now)
+    if period == "day":
+        return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+    if period == "month":
+        return time.mktime((lt.tm_year, lt.tm_mon, 1, 0, 0, 0, 0, 0, -1))
+    if period == "year":
+        return time.mktime((lt.tm_year, 1, 1, 0, 0, 0, 0, 0, -1))
+    # week: Monday 00:00 local time
+    monday = time.localtime(now - lt.tm_wday * 86400)
+    return time.mktime((monday.tm_year, monday.tm_mon, monday.tm_mday, 0, 0, 0, 0, 0, -1))
 
 
 # ============================================================
@@ -299,6 +348,351 @@ async def x_exer_summary(req: Request, days: int = 7):
             (u["user_id"], since, u["user_id"], since)
         ).fetchall()
         return JSONResponse({"ok": True, "days": days, "by_type": [dict(r) for r in rows]})
+    finally:
+        c.close()
+
+
+@app.get("/api/v2/training/data")
+async def x_training_data(req: Request, period: str = "week"):
+    """App-facing training data page: summary + sessions + reps + image availability."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    period = (period or "week").lower()
+    if period not in ("day", "week", "month", "year"):
+        period = "week"
+    since = _period_since(period)
+    c = _db()
+    try:
+        summary_row = c.execute(
+            "SELECT COUNT(*) AS sessions_count, COALESCE(SUM(reps),0) AS total_reps, "
+            "       COALESCE(SUM(duration_s),0) AS total_seconds, AVG(avg_form_score) AS avg_score "
+            "FROM exercise_log WHERE user_id=? AND created_at>=?",
+            (u["user_id"], since)
+        ).fetchone()
+        type_rows = c.execute(
+            "SELECT exercise_type, COALESCE(SUM(reps),0) AS total_reps, COUNT(*) AS sessions, "
+            "       COALESCE(SUM(duration_s),0) AS total_seconds, AVG(avg_form_score) AS avg_form "
+            "FROM exercise_log WHERE user_id=? AND created_at>=? "
+            "GROUP BY exercise_type ORDER BY total_reps DESC",
+            (u["user_id"], since)
+        ).fetchall()
+        sess_rows = c.execute(
+            "SELECT session_id, device_id, exercise_type, start_time, end_time, total_reps, avg_form_score, status "
+            "FROM sessions WHERE user_id=? AND start_time>=? ORDER BY start_time DESC LIMIT 80",
+            (str(u["user_id"]), since)
+        ).fetchall()
+        sessions = []
+        for s in sess_rows:
+            sd = dict(s)
+            rep_rows = c.execute(
+                "SELECT id, session_id, rep_index, exercise, total, depth, control, symmetry, peak_angle, "
+                "       duration_s, feedback, ts, true_label, error_type, start_frame, peak_frame, end_frame, clip_dir "
+                "FROM rep_scores WHERE session_id=? ORDER BY rep_index ASC, id ASC",
+                (sd["session_id"],)
+            ).fetchall()
+            reps = []
+            for rr in rep_rows:
+                rd = dict(rr)
+                images = _rep_image_urls(rd, include_frames=False)
+                reps.append({
+                    "id": rd.get("id"),
+                    "rep_index": rd.get("rep_index"),
+                    "exercise": rd.get("exercise"),
+                    "total": rd.get("total"),
+                    "depth": rd.get("depth"),
+                    "control": rd.get("control"),
+                    "symmetry": rd.get("symmetry"),
+                    "peak_angle": rd.get("peak_angle"),
+                    "duration_s": rd.get("duration_s"),
+                    "feedback": rd.get("feedback"),
+                    "ts": rd.get("ts"),
+                    "true_label": rd.get("true_label"),
+                    "error_type": rd.get("error_type"),
+                    "has_images": images["has_images"],
+                    "image_count": len(images["keyframes"]) + int(images["frame_count"] or 0),
+                    "keyframes": images["keyframes"],
+                })
+            sd["reps"] = reps
+            sd["rep_count"] = len(reps)
+            sd["has_images"] = any(r.get("has_images") for r in reps)
+            sessions.append(sd)
+    finally:
+        c.close()
+    return JSONResponse({
+        "ok": True,
+        "period": period,
+        "since": since,
+        "summary": {
+            "sessions_count": int(summary_row["sessions_count"] or 0),
+            "total_reps": int(summary_row["total_reps"] or 0),
+            "total_minutes": round(float(summary_row["total_seconds"] or 0) / 60.0, 2),
+            "avg_score": round(float(summary_row["avg_score"] or 0.0), 1),
+        },
+        "by_type": [dict(r) for r in type_rows],
+        "sessions": sessions,
+    })
+
+
+@app.get("/api/v2/training/rep/{rep_id}/images")
+async def x_training_rep_images(rep_id: int, req: Request):
+    """Return saved keyframes and clip-frame URLs for one rep owned by current user."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        row = c.execute(
+            "SELECT r.id, r.session_id, r.rep_index, r.exercise, r.total, r.depth, r.control, r.symmetry, "
+            "       r.peak_angle, r.duration_s, r.feedback, r.ts, r.true_label, r.error_type, "
+            "       r.start_frame, r.peak_frame, r.end_frame, r.clip_dir "
+            "FROM rep_scores r JOIN sessions s ON s.session_id=r.session_id "
+            "WHERE r.id=? AND s.user_id=?",
+            (rep_id, str(u["user_id"]))
+        ).fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        d = dict(row)
+        images = _rep_image_urls(d, include_frames=True)
+        rep = {k: d.get(k) for k in ("id", "session_id", "rep_index", "exercise", "total", "depth", "control", "symmetry", "peak_angle", "duration_s", "feedback", "ts", "true_label", "error_type")}
+        return JSONResponse({"ok": True, "rep": rep, **images})
+    finally:
+        c.close()
+
+
+@app.post("/api/v2/agent/chat")
+async def x_fitness_agent_chat(req: Request):
+    """Dedicated user fitness agent: routes to coach/analysis/plan/nutrition knowledge."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    body = await req.json()
+    message = (body.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"ok": False, "error": "message required"}, status_code=400)
+    mode = (body.get("mode") or "auto").strip()
+    c = _db()
+    try:
+        # Persist user/assistant turns on the server side so switching App tabs,
+        # fragment recreation, or App restart does not erase Agent context.
+        recent_history = fitness_agent.get_agent_chat_history(c, u["user_id"], limit=20)
+        compact_history = prepare_llm_history_with_summary(c, u["user_id"], recent_history, recent_limit=10)
+        fitness_agent.add_agent_chat_message(c, u["user_id"], "user", message, mode=mode)
+        res = fitness_agent.start_run(
+            c,
+            u["user_id"],
+            message,
+            mode=mode,
+            history=compact_history,
+        )
+        reply = (res.get("reply") or "").strip()
+        if reply:
+            fitness_agent.add_agent_chat_message(
+                c,
+                u["user_id"],
+                "assistant",
+                reply,
+                mode=mode,
+                domains=res.get("domains") or [],
+            )
+    finally:
+        c.close()
+    return JSONResponse(res)
+
+
+@app.get("/api/v2/agent/history")
+async def x_fitness_agent_history(req: Request, limit: int = 50):
+    """Return persisted Fitness Agent chat history for the current user."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        messages = fitness_agent.get_agent_chat_history(c, u["user_id"], limit=limit)
+        return JSONResponse({"ok": True, "messages": messages})
+    finally:
+        c.close()
+
+
+@app.delete("/api/v2/agent/history")
+async def x_fitness_agent_history_clear(req: Request):
+    """Clear persisted Fitness Agent chat history for the current user."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        deleted = fitness_agent.delete_agent_chat_history(c, u["user_id"])
+        return JSONResponse({"ok": True, "message": "cleared", "deleted": deleted})
+    finally:
+        c.close()
+
+
+@app.get("/api/v2/agent/approvals")
+async def x_fitness_agent_approvals(req: Request, limit: int = 20):
+    """List pending Agent tool approvals for the current user."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        approvals = fitness_agent.list_pending_approvals(c, u["user_id"], limit=limit)
+        return JSONResponse({"ok": True, "approvals": approvals})
+    finally:
+        c.close()
+
+
+@app.post("/api/v2/agent/approvals/{approval_id}/approve")
+async def x_fitness_agent_approval_approve(approval_id: str, req: Request):
+    """Approve and execute one pending Agent write-tool request."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        item = fitness_agent.get_approval(c, u["user_id"], approval_id)
+        if not item:
+            return JSONResponse({"ok": False, "error": "approval not found"}, status_code=404)
+        if item.get("status") != "pending":
+            return JSONResponse({"ok": False, "error": "approval already decided", "approval": item}, status_code=409)
+        result = fitness_agent.execute_tool(c, u["user_id"], item["tool_name"], item.get("args") or {})
+        fitness_agent.mark_approval(c, u["user_id"], approval_id, "executed" if result.get("ok") else "failed", result)
+        resume = fitness_agent.resume_run_after_approval(c, u["user_id"], item, result)
+        reply = (resume.get("reply") or "").strip()
+        if reply:
+            fitness_agent.add_agent_chat_message(
+                c,
+                u["user_id"],
+                "assistant",
+                reply,
+                mode="approval_resume",
+                domains=[],
+            )
+        return JSONResponse({
+            "ok": bool(result.get("ok")),
+            "approval_id": approval_id,
+            "run_id": item.get("run_id"),
+            "result": result,
+            "resume": resume,
+            "reply": reply,
+            "message": reply or ("executed" if result.get("ok") else "failed"),
+            "run_status": resume.get("run_status"),
+        })
+    finally:
+        c.close()
+
+
+@app.post("/api/v2/agent/approvals/{approval_id}/deny")
+async def x_fitness_agent_approval_deny(approval_id: str, req: Request):
+    """Deny one pending Agent write-tool request."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        item = fitness_agent.get_approval(c, u["user_id"], approval_id)
+        if not item:
+            return JSONResponse({"ok": False, "error": "approval not found"}, status_code=404)
+        if item.get("status") != "pending":
+            return JSONResponse({"ok": False, "error": "approval already decided", "approval": item}, status_code=409)
+        fitness_agent.mark_approval(c, u["user_id"], approval_id, "denied", {"ok": False, "message": "user denied"})
+        resume = fitness_agent.resume_run_after_denial(c, u["user_id"], item)
+        reply = (resume.get("reply") or "").strip()
+        if reply:
+            fitness_agent.add_agent_chat_message(
+                c,
+                u["user_id"],
+                "assistant",
+                reply,
+                mode="approval_resume",
+                domains=[],
+            )
+        return JSONResponse({
+            "ok": True,
+            "approval_id": approval_id,
+            "run_id": item.get("run_id"),
+            "message": reply or "denied",
+            "resume": resume,
+            "reply": reply,
+            "run_status": resume.get("run_status"),
+        })
+    finally:
+        c.close()
+
+
+@app.post("/api/v2/agent/nutrition_plan")
+async def x_fitness_agent_nutrition(req: Request):
+    """Shortcut endpoint for the initial nutritionist capability."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    body = await req.json()
+    goal = (body.get("goal") or "维持训练表现并优化体成分").strip()
+    c = _db()
+    try:
+        msg = f"帮我规划饮食，先给各类营养目标量，再给具体食堂三餐和加餐建议。目标: {goal}"
+        recent_history = fitness_agent.get_agent_chat_history(c, u["user_id"], limit=20)
+        compact_history = prepare_llm_history_with_summary(c, u["user_id"], recent_history, recent_limit=10)
+        fitness_agent.add_agent_chat_message(c, u["user_id"], "user", msg, mode="nutrition")
+        res = fitness_agent.start_run(
+            c,
+            u["user_id"],
+            msg,
+            mode="nutrition",
+            history=compact_history,
+        )
+        reply = (res.get("reply") or "").strip()
+        if reply:
+            fitness_agent.add_agent_chat_message(
+                c,
+                u["user_id"],
+                "assistant",
+                reply,
+                mode="nutrition",
+                domains=res.get("domains") or [],
+            )
+    finally:
+        c.close()
+    return JSONResponse(res)
+
+
+@app.get("/api/v2/agent/kb")
+async def x_fitness_agent_kb(req: Request):
+    """Expose agent knowledge domains for the App UI."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    return JSONResponse({
+        "ok": True,
+        "domains": fitness_agent.get_domain_catalog()
+    })
+
+
+@app.get("/api/v2/agent/runs")
+async def x_fitness_agent_runs(req: Request, limit: int = 20):
+    """List recent durable Agent runs for the current user."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        return JSONResponse({"ok": True, "runs": fitness_agent.list_runs(c, u["user_id"], limit=limit)})
+    finally:
+        c.close()
+
+
+@app.get("/api/v2/agent/runs/{run_id}")
+async def x_fitness_agent_run_detail(run_id: str, req: Request):
+    """Return one durable Agent run with trace/todos/status."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        run = fitness_agent.get_run(c, u["user_id"], run_id)
+        if not run:
+            return JSONResponse({"ok": False, "error": "run not found"}, status_code=404)
+        return JSONResponse({"ok": True, "run": run})
     finally:
         c.close()
 

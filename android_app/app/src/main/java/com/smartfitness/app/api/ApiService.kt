@@ -73,6 +73,12 @@ interface ApiService {
     @GET("api/v2/exercise/summary")
     suspend fun exerciseSummary(@Query("days") days: Int = 7): ExerciseSummaryResponse
 
+    @GET("api/v2/training/data")
+    suspend fun trainingData(@Query("period") period: String = "week"): TrainingDataResponse
+
+    @GET("api/v2/training/rep/{rep_id}/images")
+    suspend fun trainingRepImages(@Path("rep_id") repId: Long): TrainingRepImageResponse
+
     // ---------- D-05 Device Binding ----------
 
     @POST("api/v2/devices/bind")
@@ -122,6 +128,28 @@ interface ApiService {
     // ---------- AI Plan Generate (LLM) ----------
     @POST("api/v2/ai/plan_generate")
     suspend fun aiGeneratePlan(@Body req: AiPlanGenerateRequest): AiPlanGenerateResponse
+
+    // ---------- Dedicated Fitness Agent ----------
+    @POST("api/v2/agent/chat")
+    suspend fun fitnessAgentChat(@Body req: com.smartfitness.app.model.AgentChatRequest): com.smartfitness.app.model.AgentChatResponse
+
+    @GET("api/v2/agent/history")
+    suspend fun fitnessAgentHistory(@Query("limit") limit: Int = 50): com.smartfitness.app.model.AgentChatHistoryResponse
+
+    @DELETE("api/v2/agent/history")
+    suspend fun clearFitnessAgentHistory(): GenericOkResponse
+
+    @GET("api/v2/agent/approvals")
+    suspend fun fitnessAgentApprovals(@Query("limit") limit: Int = 20): com.smartfitness.app.model.AgentApprovalListResponse
+
+    @POST("api/v2/agent/approvals/{approval_id}/approve")
+    suspend fun approveFitnessAgentTool(@Path("approval_id") approvalId: String): com.smartfitness.app.model.AgentApprovalActionResponse
+
+    @POST("api/v2/agent/approvals/{approval_id}/deny")
+    suspend fun denyFitnessAgentTool(@Path("approval_id") approvalId: String): com.smartfitness.app.model.AgentApprovalActionResponse
+
+    @POST("api/v2/agent/nutrition_plan")
+    suspend fun fitnessAgentNutrition(@Body req: com.smartfitness.app.model.AgentNutritionPlanRequest): com.smartfitness.app.model.AgentChatResponse
 
     // ---------- AI Coach Butler: 复盘 + 教练记忆 (2026-06-11) ----------
     @POST("api/v2/ai/coach_review")

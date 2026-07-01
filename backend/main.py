@@ -30,7 +30,10 @@ import threading
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+    _BACKEND_DIR = os.path.dirname(__file__)
+    # Global backend settings first, then agent-specific overrides in fitness_agent/.env.
+    load_dotenv(os.path.join(_BACKEND_DIR, ".env"))
+    load_dotenv(os.path.join(_BACKEND_DIR, "fitness_agent", ".env"), override=True)
 except ImportError:
     pass  # python-dotenv 未安装时退回纯环境变量
 

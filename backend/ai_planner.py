@@ -9,8 +9,14 @@
 - chat(user_id, message): 自由对话 (带历史 + 用户数据上下文)
 - meal_suggestion(user_id): 结合训练强度的食堂搭配建议
 """
-import os, json, time, sqlite3, logging
+import os, json, time, sqlite3, logging, uuid
 from typing import Optional, Dict, List, Any
+
+try:
+    from fitness_agent.config import load_agent_env
+    load_agent_env()
+except Exception:
+    pass
 
 try:
     import requests
@@ -513,21 +519,23 @@ def generate_plan(conn, user_id, goal, weeks=4):
         log.warning(f"plan JSON parse failed: {e}, raw[:200]={raw[:200]}")
         return {"ok": False, "error": f"AI 返回的格式有误: {e}", "raw": raw[:500], "plans": []}
 
-    # 写入 workout_plans 表 (真实 schema: plan_id auto, user_id, name, exercises JSON, created_at)
+    # 写入 workout_plans 表 (plan_id 必填: 缺失会导致前端无法删除该计划)
     cur = conn.cursor()
     today_ts = int(time.time())
     plan_name = f"AI 计划-{goal[:20]} {weeks}周"
+    plan_id = "plan_" + uuid.uuid4().hex[:12]
     try:
         cur.execute(
-            "INSERT INTO workout_plans (user_id, name, exercises, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, plan_name, json.dumps(plans, ensure_ascii=False), today_ts)
+            "INSERT INTO workout_plans (plan_id, user_id, name, exercises, created_at) VALUES (?, ?, ?, ?, ?)",
+            (plan_id, user_id, plan_name, json.dumps(plans, ensure_ascii=False), today_ts)
         )
         conn.commit()
         inserted = cur.rowcount
     except Exception as e:
         log.warning(f"insert plan failed: {e}")
         inserted = 0
-    return {"ok": True, "plans": plans, "inserted": inserted, "goal": goal, "plan_name": plan_name}
+    return {"ok": True, "plans": plans, "inserted": inserted, "goal": goal,
+            "plan_name": plan_name, "plan_id": plan_id}
 
 
 def chat(conn, user_id, message, history=None):

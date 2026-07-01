@@ -20,13 +20,20 @@ import time
 
 import requests
 
+try:
+    from fitness_agent.config import load_agent_env
+    load_agent_env()
+except Exception:
+    pass
+
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BACKEND_DIR, "fitness.db")
 
-# 评审模型: 百炼 qwen3-vl-plus (主) — key 从环境/.env 读
+# 评审模型: 百炼 qwen3-vl-plus (主) — key 从 fitness_agent/.env 或系统环境读取
 try:
     from dotenv import load_dotenv
     load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+    load_dotenv(os.path.join(BACKEND_DIR, "fitness_agent", ".env"), override=True)
 except ImportError:
     pass
 VL_KEY = os.environ.get("BAILIAN_API_KEY", "") or os.environ.get("DASHSCOPE_API_KEY", "")
