@@ -12,6 +12,7 @@ import ai_planner
 from .core import _fallback_nutrition, detect_domains
 from .hooks import trigger_hooks
 from .knowledge_loader import knowledge_ids, load_knowledge
+from .memory import infer_memory_kind
 from .permissions import list_pending_approvals
 from .prompts import build_system_prompt
 from .tools import execute_tool
@@ -138,7 +139,56 @@ def _forced_body_metric_tool_call(message: str) -> Optional[Dict[str, Any]]:
     return {"name": "update_body_metrics", "args": args}
 
 
+def _forced_memory_tool_call(message: str) -> Optional[Dict[str, Any]]:
+    """Deterministically route explicit "remember this" requests to approval.
+
+    The normal loop can already call ``save_coach_memory``, but this catches the
+    most common App flow even when the LLM answers in prose or is temporarily
+    unavailable. It still does not write data; the permission hook creates a
+    pending App approval exactly like a model-emitted write tool call.
+    """
+    msg = (message or "").strip()
+    if not msg:
+        return None
+    lower = msg.lower()
+    has_memory_intent = any(
+        w in msg for w in ["记住", "记一下", "记下", "保存这条", "保存一下", "以后记得", "你要记得", "帮我记"]
+    ) or any(
+        w in lower for w in ["remember that", "remember:", "save this", "save note", "note that"]
+    )
+    if not has_memory_intent:
+        return None
+
+    note = msg
+    patterns = [
+        r"^(?:请)?(?:帮我)?(?:把)?(?:这个|这条)?(?:记住|记一下|记下|保存这条|保存一下|帮我记)(?:一下)?[：:,，\s]*(.+)$",
+        r"^(?:以后)?(?:你要)?记得[：:,，\s]*(.+)$",
+        r"^remember(?:\s+that)?[：:,\s]+(.+)$",
+        r"^save(?:\s+this|\s+note)?[：:,\s]+(.+)$",
+        r"^note(?:\s+that)?[：:,\s]+(.+)$",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, msg, re.I)
+        if m:
+            note = m.group(1).strip()
+            break
+    note = re.sub(r"^(我说的是|内容是|这件事是)[：:,，\s]*", "", note).strip()
+    note = re.sub(r"[。.!！\s]*(谢谢|thx|thanks)?$", "", note, flags=re.I).strip()
+    if len(note) < 4:
+        return None
+    return {"name": "save_coach_memory", "args": {"note": note[:500], "kind": infer_memory_kind(note)}}
+
+
 def _approval_reply_for_forced_call(call: Dict[str, Any], item: Dict[str, Any]) -> str:
+    if call.get("name") == "save_coach_memory":
+        note = (call.get("args") or {}).get("note") or "这条长期记忆"
+        if item.get("result", {}).get("permission") == "pending":
+            return f"我已准备保存长期记忆：{note}。需要你在 App 弹窗确认后才会写入。"
+        result = item.get("result") or {}
+        if result.get("ok"):
+            return f"已保存长期记忆：{note}。"
+        return f"长期记忆未保存：{result.get('error') or result.get('message') or '需要重新确认'}"
+
     args = call.get("args") or {}
     parts = []
     if args.get("weight_kg") is not None:
@@ -271,7 +321,7 @@ def respond_with_loop(conn, user_id: int, message: str, mode: str = "auto", hist
         "run_id": run_id,
     })
 
-    forced_call = _forced_body_metric_tool_call(message)
+    forced_call = _forced_body_metric_tool_call(message) or _forced_memory_tool_call(message)
     if forced_call:
         item = _run_tool_with_hooks(
             conn,

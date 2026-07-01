@@ -5,13 +5,9 @@
         android:title="@string/home"
         android:icon="@drawable/ic_nav_home" />
     <item
-        android:id="@+id/trainingFragment"
-        android:title="@string/training"
-        android:icon="@drawable/ic_nav_training" />
-    <item
-        android:id="@+id/plansFragment"
-        android:title="@string/plans"
-        android:icon="@drawable/ic_nav_plans" />
+        android:id="@+id/fitnessAgentFragment"
+        android:title="健身Agent"
+        android:icon="@drawable/ic_g_agent" />
     <item
         android:id="@+id/profileFragment"
         android:title="@string/profile"

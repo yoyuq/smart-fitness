@@ -11,8 +11,8 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
 
     private const val DEFAULT_BASE_URL_EMULATOR = "http://10.0.2.2:8080/"
-    /** 真机默认服务器（主机在 192.168.123.203 上跑 :8080） */
-    const val DEFAULT_BASE_URL_REAL = "http://192.168.123.203:8080/"
+    /** 真机默认服务器（当前电脑 WLAN IP，后端 :8080） */
+    const val DEFAULT_BASE_URL_REAL = "http://192.168.22.56:8080/"
 
     /** 运行时看是否在模拟器上（Build.FINGERPRINT 含 generic/sdk）选默认 */
     private fun isProbablyEmulator(): Boolean {

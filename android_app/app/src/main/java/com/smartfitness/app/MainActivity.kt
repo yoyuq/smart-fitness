@@ -45,7 +45,10 @@ class MainActivity : AppCompatActivity() {
         // 登录/注册后自动跳 home → 显示底部导航；退到 login → 隐藏
         navController.addOnDestinationChangedListener { _, dest, _ ->
             when (dest.id) {
-                R.id.loginFragment -> bottomNav.visibility = android.view.View.GONE
+                R.id.loginFragment,
+                R.id.bodyMetricsFragment,
+                R.id.goalsFragment,
+                R.id.planDetailFragment -> bottomNav.visibility = android.view.View.GONE
                 else -> bottomNav.visibility = android.view.View.VISIBLE
             }
         }

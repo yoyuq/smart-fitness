@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Fitness · 模型监控台</title>
+<style>
+  :root{--bg:#0E141B;--panel:#18222E;--panel2:#1F2C3A;--grid:#2A3744;
+        --green:#2DE39E;--red:#FF6B6B;--cyan:#35B8FF;--orange:#FFB34D;--txt:#F2F6FA;--sub:#9AA8B6;}
+  *{box-sizing:border-box;font-family:"Microsoft YaHei","Segoe UI",sans-serif;}
+  body{margin:0;background:var(--bg);color:var(--txt);}
+  .top{display:flex;align-items:center;gap:14px;padding:12px 20px;background:var(--panel);
+       border-bottom:2px solid var(--green);}
+  .top h1{font-size:18px;margin:0;}
+  .badge{font-size:12px;padding:4px 10px;border-radius:12px;background:var(--panel2);color:var(--sub);}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--red);}
+  .dot.on{background:var(--green);box-shadow:0 0 8px var(--green);}
+  .wrap{padding:16px 20px;display:grid;gap:16px;}
+  .row{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;}
+  .card{background:var(--panel);border:1px solid var(--grid);border-radius:14px;padding:14px 16px;}
+  .card h2{margin:0 0 10px;font-size:14px;color:var(--sub);font-weight:600;letter-spacing:.5px;}
+  .frameBox{position:relative;background:#000;border-radius:10px;overflow:hidden;min-height:300px;
+            display:flex;align-items:center;justify-content:center;}
+  #frame{width:100%;display:block;}
+  #overlay{position:absolute;left:0;top:0;}
+  .noframe{color:var(--sub);font-size:14px;padding:40px;}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .stat{background:var(--panel2);border-radius:10px;padding:12px;}
+  .stat .k{font-size:12px;color:var(--sub);}
+  .stat .v{font-size:30px;font-weight:700;margin-top:2px;line-height:1;}
+  .stat .v small{font-size:14px;color:var(--sub);font-weight:400;}
+  .fb{grid-column:1/3;background:var(--panel2);border-radius:10px;padding:10px 12px;min-height:40px;font-size:14px;}
+  .fb .lab{color:var(--sub);font-size:12px;margin-right:6px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--grid);}
+  th{color:var(--sub);font-weight:600;font-size:12px;}
+  tr.rep{cursor:pointer;} tr.rep:hover{background:var(--panel2);}
+  .pill{padding:2px 8px;border-radius:10px;font-weight:700;font-size:12px;}
+  canvas{display:block;width:100%;}
+  .muted{color:var(--sub);font-size:12px;}
+  .legend{font-size:12px;color:var(--sub);margin-top:6px;}
+  .legend b{color:var(--txt);}
+  .split{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>🏋️ Smart Fitness · 模型监控台</h1>
+  <span class="badge"><span id="liveDot" class="dot"></span><span id="liveTxt">未连接</span></span>
+  <span class="badge" id="devBadge">device: —</span>
+  <span class="badge" id="clock">—</span>
+  <span style="flex:1"></span>
+  <span class="badge">实时识别 · 历史数据 · ESP32 真实帧</span>
+</div>
+
+<div class="wrap">
+  <!-- 训练控制 -->
+  <div class="card" id="ctrlCard">
+    <style>
+      .cbtn{border:none;border-radius:10px;padding:13px 28px;margin-right:12px;cursor:pointer;font-size:16px;font-weight:700;color:#fff}
+      .cstart{background:#16a34a}.cstop{background:#dc2626}.cbtn:disabled{opacity:.4;cursor:default}
+      .exb{border:1px solid #475569;background:#1e293b;color:#cbd5e1;border-radius:8px;padding:8px 14px;margin:3px 6px 3px 0;cursor:pointer;font-size:14px}
+      .exb.on{background:#0e9488;border-color:#0e9488;color:#fff;font-weight:700}
+    </style>
+    <h2>训练控制（开始 / 完成运动 · 切换动作）</h2>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <button id="btnStart" class="cbtn cstart" onclick="sessStart()">▶ 开始运动</button>
+      <button id="btnStop" class="cbtn cstop" onclick="sessStop()">■ 完成运动</button>
+      <span id="recStat" style="font-size:16px;margin-left:6px">—</span>
+    </div>
+    <div><span class="muted">切换训练动作：</span><span id="exBtns"></span></div>
+  </div>
+  <!-- 实时识别 -->
+  <div class="row">
+    <div class="card">
+      <h2>① ESP32 实时帧 + 识别叠加（后端真正推理的画面）</h2>
+      <div class="frameBox" id="frameBox">
+        <img id="frame" alt="">
+        <canvas id="overlay"></canvas>
+        <div class="noframe" id="noframe">等待 ESP32 画面…（开始训练后出现）</div>
+      </div>
+      <div class="legend">骨架点来自模型识别结果 · 画面为 ESP32 传到后端的真实帧</div>
+    </div>
+    <div class="card">
+      <h2>② 模型识别 · 实时状态</h2>
+      <div class="stats">
+        <div class="stat"><div class="k">当前动作</div><div class="v" id="ex">—</div></div>
+        <div class="stat"><div class="k">完成次数 rep</div><div class="v" id="reps" style="color:var(--green)">0</div></div>
+        <div class="stat"><div class="k">本帧评分 form</div><div class="v" id="form">—</div></div>
+        <div class="stat"><div class="k">状态</div><div class="v" id="phase" style="font-size:20px;">—</div></div>
+        <div class="fb"><span class="lab">教练反馈</span><span id="fb">—</span></div>
+        <div class="fb" id="calibBox"><span class="lab">全身校准</span><span id="calib">—</span></div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="muted">最近一次完成动作:<span id="lastRep">—</span></div>
+        <div class="muted" style="margin-top:8px;">评分实时曲线(form)</div>
+        <canvas id="spark" height="90"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 动作识别参数 -->
+  <div class="card" id="sigCard">
+    <h2>②.5 动作识别参数（多参数判定:用户是不是在做该动作）</h2>
+    <div id="sigBody" class="muted">—</div>
+  </div>
+
+  <!-- 数据采集 · 批量标注 -->
+  <div class="card" id="labelCard">
+    <style>
+      .lbtn{border:none;border-radius:10px;padding:13px 20px;margin:4px 10px 4px 0;cursor:pointer;font-size:15px;font-weight:700;color:#fff}
+      .lbtn.pass{background:#16a34a}.lbtn.fail{background:#dc2626}.lbtn:active{transform:scale(.96)}.lbtn:disabled{opacity:.45}
+    </style>
+    <h2>②.6 数据采集 · 批量标注（做完一批 → 点对应按钮给这批打标签）</h2>
+    <div id="labelStat" class="muted" style="margin-bottom:10px">—</div>
+    <div>
+      <button class="lbtn pass" onclick="labelBatch('合格','standard',this)">✓ 标准（合格）</button>
+      <button class="lbtn fail" onclick="labelBatch('不合格','shallow',this)">✗ 太浅</button>
+      <button class="lbtn fail" onclick="labelBatch('不合格','deep',this)">✗ 太深</button>
+      <button class="lbtn fail" onclick="labelBatch('不合格','fast',this)">✗ 太快</button>
+      <button class="lbtn fail" onclick="labelBatch('不合格','lean',this)">✗ 前倾</button>
+      <button class="lbtn fail" onclick="labelBatch('不合格','asym',this)">✗ 不对称</button>
+    </div>
+    <div id="labelMsg" style="margin-top:10px;font-size:14px;min-height:20px"></div>
+  </div>
+
+  <!-- 历史数据 -->
+  <div class="card">
+    <h2>③ 历史训练数据（点任意一行看该次动作的角度轨迹）</h2>
+    <div class="split">
+      <div>
+        <div style="max-height:320px;overflow:auto;">
+          <table id="histTable">
+            <thead><tr><th>#</th><th>动作</th><th>判定</th><th>总分</th><th>深度</th><th>控制</th><th>对称</th><th>最深</th><th>用时</th></tr></thead>
+            <tbody id="histBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="muted">最近 rep 总分趋势</div>
+        <canvas id="histChart" height="150"></canvas>
+        <div class="muted" style="margin-top:10px;">选中动作的角度轨迹 <span id="repTitle"></span></div>
+        <canvas id="trajChart" height="170"></canvas>
+        <div class="muted" style="margin-top:12px;">该次动作画面（点历史任意一行）</div>
+        <div id="repFrames" class="muted">—</div>
+        <div id="repJudge" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模型评估 -->
+  <div class="card" id="evalCard">
+    <h2>④ TCN 模型「合格判定」准确率（诚实评估 · 用户标注 · 交叉验证）</h2>
+    <div id="evalBody" class="muted">加载中…</div>
+  </div>
+</div>
+
+<script>
+const API = "";  // 同源
+const DOWN=130, UP=145, ZLO=40, ZHI=100;
+const COL={green:"#2DE39E",red:"#FF6B6B",cyan:"#35B8FF",orange:"#FFB34D",sub:"#9AA8B6",grid:"#2A3744",txt:"#F2F6FA",panel:"#18222E"};
+// MediaPipe 33 点主要连线
+const CONN=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[27,29],[29,31],[24,26],[26,28],[28,30],[30,32],[0,11],[0,12]];
+
+function scoreColor(v){if(v==null)return COL.sub;return v>=85?COL.green:v>=60?COL.orange:COL.red;}
+const PASS_T=85;
+function passFail(r){const ok=(r.total!=null)&&r.total>=PASS_T;let reason="";
+  if(!ok&&r.depth!=null){const d=[["深度",r.depth],["控制",r.control],["对称",r.symmetry]].sort((a,b)=>a[1]-b[1]);reason=d[0][0]+"偏低 "+Math.round(d[0][1]);}
+  return {ok,reason};}
+function pfPill(r){const p=passFail(r);const c=p.ok?COL.green:COL.red;
+  return `<span class="pill" style="background:${c}22;color:${c}">${p.ok?"合格":"不合格"}</span>`+(p.reason?` <span class="muted">${p.reason}</span>`:"");}
+function renderSig(sig,ex){const box=document.getElementById('sigBody');if(!box)return;
+  if(!sig||!sig.params||!sig.params.length){box.innerHTML='<span class="muted">暂无识别参数(未在训练 / 未选动作)</span>';return;}
+  const head=`<div style="margin-bottom:8px">判定: <b style="color:${sig.ok?COL.green:COL.red};font-size:16px">${sig.ok?'符合「'+(ex||sig.exercise)+'」':'不符合 — 不计这次'}</b> · 综合匹配 ${Math.round(sig.score*100)}%</div>`;
+  const cells=sig.params.map(p=>{const c=p.ok?COL.green:COL.red;
+    return `<div class="stat" style="padding:9px"><div class="k">${p.name}${p.hard?' <span style="color:'+COL.orange+'">*</span>':''}</div>`+
+      `<div style="font-size:17px;font-weight:700;color:${c}">${p.ok?'✓':'✗'} <span class="muted" style="font-weight:400;font-size:13px">${p.val!=null?p.val:'—'}</span></div></div>`;}).join("");
+  box.innerHTML=head+`<div class="stats" style="grid-template-columns:repeat(3,1fr)">${cells}</div>`+
+    `<div class="legend">带 <b style="color:${COL.orange}">*</b> = 硬性条件(全部满足才认定为该动作并计数);其余为辅助信号。参数随你做动作实时变化。</div>`;}
+function loadEval(){fetch(API+"/api/v2/monitor/eval").then(r=>r.json()).then(e=>{
+  const el=document.getElementById('evalBody');if(!el)return;
+  if(e.available===false){el.textContent="尚无评估结果(在 backend 运行 python train_user_tcn.py 生成)";return;}
+  const acc=Math.round(e.accuracy*100),base=Math.round(e.baseline_majority*100);const warn=acc<=base;
+  if(e.task==='standard_shallow_deep'){
+    const rp=Math.round(e.recall_pass*100),rs=Math.round(e.recall_shallow*100),rd=Math.round(e.recall_deep*100);
+    el.innerHTML=`<div class="stats" style="grid-template-columns:repeat(5,1fr)">`+
+     `<div class="stat"><div class="k">三分类准确率</div><div class="v" style="color:${warn?COL.orange:COL.green}">${acc}<small>%</small></div></div>`+
+     `<div class="stat"><div class="k">多数类基线</div><div class="v" style="color:${COL.sub}">${base}<small>%</small></div></div>`+
+     `<div class="stat"><div class="k">合格召回</div><div class="v" style="color:${COL.green}">${rp}<small>%</small></div></div>`+
+     `<div class="stat"><div class="k">太浅召回</div><div class="v" style="color:${COL.orange}">${rs}<small>%</small></div></div>`+
+     `<div class="stat"><div class="k">太深召回</div><div class="v" style="color:${COL.red}">${rd}<small>%</small></div></div></div>`+
+     `<div class="muted" style="margin-top:10px;line-height:1.6">当前仅识别 <b>合格 / 太浅 / 太深</b>。依据 ${e.n} 条真实 rep：合格 ${e.n_pass}、太浅 ${e.n_shallow}、太深 ${e.n_deep}；已排除太快/其他。${e.cv}。`+
+     (warn?`<b style="color:${COL.orange}"> 准确率未超过多数类基线，暂不可靠。</b>`:``)+
+     `</div>`;
+    return;
+  }
+  const rf=Math.round(e.recall_fail*100);
+  el.innerHTML=`<div class="stats" style="grid-template-columns:repeat(3,1fr)">`+
+   `<div class="stat"><div class="k">TCN 准确率</div><div class="v" style="color:${warn?COL.orange:COL.green}">${acc}<small>%</small></div></div>`+
+   `<div class="stat"><div class="k">多数类基线(全判合格)</div><div class="v" style="color:${COL.sub}">${base}<small>%</small></div></div>`+
+   `<div class="stat"><div class="k">抓"不合格"召回</div><div class="v" style="color:${COL.red}">${rf}<small>%</small></div></div></div>`+
+   `<div class="muted" style="margin-top:10px;line-height:1.6">依据 ${e.n} 条真实 rep · ${e.label_source||'用户标注'} · ${e.cv}。`+
+   (warn?`<b style="color:${COL.orange}"> ⚠ 准确率未超过"全判合格"基线 → 模型目前还不能可靠判定。</b>`:``)+
+   ` 抓"不合格"召回仅 ${rf}%(漏判 ${100-rf}%)。根因:不合格标注样本太少(${e.n_fail}/${e.n})。结论:需积累更多不合格样本后重训才可靠。</div>`;
+}).catch(()=>{});}
+// ---------- 实时帧 ----------
+const frame=document.getElementById('frame'), nf=document.getElementById('noframe');
+let frameOk=false;
+function pollFrame(){
+  const u=API+"/api/v2/monitor/frame?t="+Date.now();
+  const img=new Image();
+  let done=false;
+  const next=(delay)=>{if(done)return;done=true;setTimeout(pollFrame,delay);};
+  img.onload=()=>{if(done)return;frame.src=img.src;frameOk=true;nf.style.display='none';sizeOverlay();next(66);};
+  img.onerror=()=>{frameOk=false;nf.style.display='block';next(500);};
+  img.src=u;
+  setTimeout(()=>{if(!done){img.src='';next(0);}},1200); // 看门狗: 单帧>1.2s没加载完就放弃, 立刻取下一帧, 防止取帧链卡死(画面冻住但识别还在)
+}
+const ov=document.getElementById('overlay'), octx=ov.getContext('2d');
+function sizeOverlay(){ov.width=frame.clientWidth;ov.height=frame.clientHeight;ov.style.width=frame.clientWidth+'px';ov.style.height=frame.clientHeight+'px';}
+function drawSkeleton(lms){
+  octx.clearRect(0,0,ov.width,ov.height); if(!lms||!lms.length)return;
+  const W=ov.width,H=ov.height;
+  const pt=i=>{const l=lms[i];if(!l)return null;const x=(l.x!=null?l.x:l[0]),y=(l.y!=null?l.y:l[1]);return [x*W,y*H];};
+  if(lms.length>=33){octx.strokeStyle=COL.cyan;octx.lineWidth=2;
+    CONN.forEach(([a,b])=>{const p=pt(a),q=pt(b);if(p&&q){octx.beginPath();octx.moveTo(p[0],p[1]);octx.lineTo(q[0],q[1]);octx.stroke();}});}
+  for(let i=0;i<lms.length;i++){const p=pt(i);if(!p)continue;octx.fillStyle=COL.green;octx.beginPath();octx.arc(p[0],p[1],3.2,0,7);octx.fill();}
+}
+
+// ---------- 实时状态 ----------
+const spark=[]; let lastReps=0;
+function pollState(){
+  fetch(API+"/api/v2/monitor/state").then(r=>r.json()).then(s=>{
+    setLive(true);
+    document.getElementById('devBadge').textContent="device: "+(s.device_id||"—");
+    document.getElementById('ex').textContent=s.exercise||(s.paused?"待机":"—");
+    document.getElementById('reps').textContent=s.rep_count!=null?s.rep_count:0;
+    const f=s.form_score; const fe=document.getElementById('form');
+    fe.textContent=(f!=null?Math.round(f):"—"); fe.style.color=scoreColor(f);
+    document.getElementById('phase').textContent=s.paused?"⏸ 待机":(s.detected?"● 识别中":"○ 无人");
+    document.getElementById('phase').style.color=s.paused?COL.sub:(s.detected?COL.green:COL.orange);
+    document.getElementById('fb').textContent=s.feedback||"—";
+    renderSig(s.signature, s.exercise);
+    fetch(API+"/api/v2/monitor/calibration").then(r=>r.json()).then(c=>{
+      const el=document.getElementById('calib');if(!el)return;
+      const col=c.ok?COL.green:COL.red;
+      const miss=(c.missing&&c.missing.length)?(" 缺: "+c.missing.join("/")):"";
+      el.innerHTML=`<b style="color:${col}">${c.ok?'全身齐 ✓':'未齐 ✗'}</b> <span class="muted">${c.guidance}${miss}</span>`;
+    }).catch(()=>{});
+    drawSkeleton(s.landmarks);
+    if(f!=null){spark.push(f);if(spark.length>80)spark.shift();drawSpark();}
+    if(s.last_rep){const lr=s.last_rep;
+      document.getElementById('lastRep').innerHTML=
+        ` ${lr.exercise} ${pfPill(lr)} · 规则 <b style="color:${scoreColor(lr.total)}">${Math.round(lr.total)}</b>`+
+        (lr.model_quality!=null?` · 模型 <b style="color:${scoreColor(lr.model_quality)}">${Math.round(lr.model_quality)}</b>`:"");
+    }
+    if(s.rep_count!=null && s.rep_count!==lastReps){lastReps=s.rep_count;loadHistory();}
+  }).catch(()=>setLive(false)).finally(()=>setTimeout(pollState,150));
+}
+function setLive(on){document.getElementById('liveDot').className="dot"+(on?" on":"");document.getElementById('liveTxt').textContent=on?"已连接":"未连接";}
+
+function drawSpark(){const c=document.getElementById('spark');fitW(c);const x=c.getContext('2d'),W=c.width,H=c.height;
+  x.clearRect(0,0,W,H);x.strokeStyle=COL.grid;x.lineWidth=1;[0,50,100].forEach(v=>{const y=H-v/100*H;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();});
+  if(spark.length<2)return;x.strokeStyle=COL.green;x.lineWidth=2;x.beginPath();
+  spark.forEach((v,i)=>{const px=i/(spark.length-1)*W,py=H-v/100*H;i?x.lineTo(px,py):x.moveTo(px,py);});x.stroke();}
+
+// ---------- 历史 ----------
+function loadHistory(){
+  fetch(API+"/api/v2/monitor/history?limit=40").then(r=>r.json()).then(d=>{
+    const reps=d.reps||[];const tb=document.getElementById('histBody');tb.innerHTML="";
+    reps.forEach(r=>{const tr=document.createElement('tr');tr.className="rep";
+      const lbl=r.true_label?(r.true_label==='合格'?'<span title="已判合格" style="color:#22c55e">●</span>':'<span title="已判不合格" style="color:#ef4444">●</span>'):'<span title="未判定" style="color:#f59e0b">?</span>';
+      tr.innerHTML=`<td>${r.id} ${lbl}</td><td>${r.exercise}</td>`+
+        `<td>${pfPill(r)}</td>`+
+        `<td><span class="pill" style="background:${scoreColor(r.total)}22;color:${scoreColor(r.total)}">${Math.round(r.total)}</span></td>`+
+        `<td>${Math.round(r.depth)}</td><td>${Math.round(r.control)}</td><td>${Math.round(r.symmetry)}</td>`+
+        `<td>${Math.round(r.peak_angle)}°</td><td>${(r.duration_s||0).toFixed(1)}s</td>`;
+      tr.onclick=()=>loadRep(r.id);tb.appendChild(tr);});
+    drawHist(reps.slice().reverse());
+  }).catch(()=>{});
+}
+function drawHist(reps){const c=document.getElementById('histChart');fitW(c);const x=c.getContext('2d'),W=c.width,H=c.height;
+  x.clearRect(0,0,W,H);if(!reps.length)return;const n=reps.length,bw=Math.min(26,W/n*0.7);
+  reps.forEach((r,i)=>{const px=(i+0.5)/n*W,h=r.total/100*(H-18);
+    x.fillStyle=scoreColor(r.total);x.fillRect(px-bw/2,H-h-14,bw,h);});
+  x.fillStyle=COL.sub;x.font="10px sans-serif";x.fillText("旧",2,H-2);x.fillText("新",W-16,H-2);
+}
+let trajId=null;
+function loadRep(id){trajId=id;
+  fetch(API+"/api/v2/monitor/rep/"+id).then(r=>r.json()).then(d=>{
+    document.getElementById('repTitle').innerHTML=` — rep#${id} ${d.exercise} 总分${Math.round(d.total)}`+
+      (d.model_quality!=null?` 模型${Math.round(d.model_quality)}`:"");
+    drawTraj(d);
+    renderJudge(id, d.true_label, d.error_type);
+  });
+  loadFrames(id);
+}
+function renderJudge(id,label,etype){
+  const box=document.getElementById('repJudge');if(!box)return;
+  const T={standard:'标准',shallow:'太浅',deep:'太深',fast:'太快',lean:'前倾',asym:'不对称',other:'其他'};
+  const cur=label?`<b style="color:${label==='合格'?COL.green:COL.red}">已标: ${label}${etype&&T[etype]?'·'+T[etype]:''}</b>`:'<span class="muted">未标注</span>';
+  box.innerHTML=`<div style="margin-bottom:6px">▼ 看完回放，你来判定这一次 (rep#${id})　${cur}</div>`+
+    `<button class="lbtn pass" onclick="labelRep(${id},'合格','standard')">✓ 合格</button>`+
+    `<button class="lbtn fail" onclick="labelRep(${id},'不合格','shallow')">✗ 太浅</button>`+
+    `<button class="lbtn fail" onclick="labelRep(${id},'不合格','deep')">✗ 太深</button>`+
+    `<button class="lbtn fail" onclick="labelRep(${id},'不合格','fast')">✗ 太快</button>`+
+    `<button class="lbtn fail" onclick="labelRep(${id},'不合格','lean')">✗ 前倾</button>`+
+    `<button class="lbtn fail" onclick="labelRep(${id},'不合格','asym')">✗ 不对称</button>`+
+    `<button class="lbtn fail" style="background:#475569" onclick="labelRep(${id},'不合格','other')">✗ 其他不合格</button>`+
+    `<button class="lbtn" style="background:#0b1220;border:1px solid #64748b" onclick="repDelete(${id})">🗑 删除(没做/误触发)</button>`;
+}
+function repDelete(id){
+  if(!confirm('删除 rep#'+id+'？误触发/没真做时用，连片段一起删，不可恢复'))return;
+  fetch(API+"/api/v2/monitor/rep_delete",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rep_id:id})})
+    .then(r=>r.json()).then(d=>{if(d.ok){document.getElementById('repJudge').innerHTML='<span class="muted">已删除 rep#'+id+'</span>';const rf=document.getElementById('repFrames');if(rf)rf.innerHTML='—';loadHistory();loadLabelStats();}else{alert('删除失败: '+(d.error||'?'));}}).catch(()=>{});
+}
+function labelRep(id,label,etype){
+  fetch(API+"/api/v2/monitor/label_rep",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rep_id:id,label:label,error_type:etype})})
+    .then(r=>r.json()).then(d=>{ if(d.ok){renderJudge(id,label,etype);loadLabelStats();loadHistory();} else {alert('标注失败: '+(d.error||'?'));} }).catch(()=>{});
+}
+let playTimer=null;
+function loadFrames(id){
+  fetch(API+"/api/v2/monitor/clip/"+id).then(r=>r.json()).then(c=>{
+    const box=document.getElementById('repFrames');if(!box)return;
+    if(playTimer){clearInterval(playTimer);playTimer=null;}
+    if(c.has_clip){
+      box.innerHTML=`<div style="margin-bottom:6px">▶ 完整动作回放 (${c.frames.length} 帧) `+
+        `<button id="playBtn" class="pill" style="background:#2DE39E22;color:#2DE39E;cursor:pointer;border:none">播放</button>`+
+        ` <input id="scrub" type="range" min="0" max="${c.frames.length-1}" value="0" style="width:55%;vertical-align:middle"></div>`+
+        `<img id="clipImg" style="max-width:100%;border-radius:8px;background:#000" src="${c.frames[0]}">`;
+      const img=document.getElementById('clipImg'),scrub=document.getElementById('scrub'),btn=document.getElementById('playBtn');
+      scrub.oninput=()=>{img.src=c.frames[scrub.value];};let i=0;
+      btn.onclick=()=>{if(playTimer){clearInterval(playTimer);playTimer=null;btn.textContent="播放";return;}
+        btn.textContent="暂停";playTimer=setInterval(()=>{i=(+scrub.value+1)%c.frames.length;img.src=c.frames[i];scrub.value=i;},120);};
+    }else{
+      const kf=c.keyframes||{};
+      const cells=[["起始",kf.start],["最深",kf.peak],["结束",kf.end]].filter(x=>x[1])
+        .map(x=>`<div style="text-align:center"><div class="muted">${x[0]}</div><img src="${x[1]}" style="width:100%;border-radius:6px;background:#000"></div>`).join("");
+      box.innerHTML=`<div style="margin-bottom:6px">该次仅存 3 关键帧（完整片段仅对此后新录的 rep 生效）</div>`+
+        `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${cells||'<span class="muted">无画面</span>'}</div>`;
+    }
+  }).catch(()=>{});
+}
+function drawTraj(d){const c=document.getElementById('trajChart');fitW(c);const x=c.getContext('2d'),W=c.width,H=c.height,pad=24;
+  x.clearRect(0,0,W,H);const s=(d.angle_series||{}).primary||[];if(!s.length){x.fillStyle=COL.sub;x.fillText("无轨迹数据",10,20);return;}
+  const ymin=30,ymax=185,Y=v=>H-pad-(v-ymin)/(ymax-ymin)*(H-2*pad),X=i=>pad+i/(s.length-1)*(W-2*pad);
+  // 深度满分区
+  x.fillStyle="rgba(45,227,158,0.10)";x.fillRect(pad,Y(ZHI),W-2*pad,Y(ZLO)-Y(ZHI));
+  // 阈值线
+  x.strokeStyle=COL.orange;x.setLineDash([4,4]);x.beginPath();x.moveTo(pad,Y(DOWN));x.lineTo(W-pad,Y(DOWN));x.stroke();
+  x.strokeStyle=COL.cyan;x.beginPath();x.moveTo(pad,Y(UP));x.lineTo(W-pad,Y(UP));x.stroke();x.setLineDash([]);
+  // 膝角曲线
+  const good=d.total>=85;x.strokeStyle=good?COL.green:COL.red;x.lineWidth=2.5;x.beginPath();
+  s.forEach((v,i)=>{i?x.lineTo(X(i),Y(v)):x.moveTo(X(i),Y(v));});x.stroke();
+  const mi=s.indexOf(Math.min(...s.filter(v=>v!=null)));
+  x.fillStyle=good?COL.green:COL.red;x.beginPath();x.arc(X(mi),Y(s[mi]),5,0,7);x.fill();
+  x.fillStyle=COL.sub;x.font="10px sans-serif";x.fillText("满分区40-100°",pad+3,Y(ZHI)+12);x.fillText("膝角(°)",2,12);
+}
+function fitW(c){if(c.width!==c.clientWidth)c.width=c.clientWidth;}
+
+window.addEventListener('resize',()=>{sizeOverlay();drawSpark();if(trajId)loadRep(trajId);});
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString();},1000);
+function loadLabelStats(){
+  fetch(API+"/api/v2/monitor/label_stats").then(r=>r.json()).then(s=>{
+    const el=document.getElementById('labelStat');if(!el)return;
+    const T={standard:'标准',shallow:'太浅',deep:'太深',fast:'太快',lean:'前倾',asym:'不对称'};
+    const bt=Object.entries(s.by_type||{}).map(([k,v])=>`${T[k]||k} ${v}`).join(' · ');
+    el.innerHTML=`<b style="color:${COL.orange};font-size:15px">未标注 ${s.unlabeled} 个</b>　|　已标注 <b style="color:${COL.green}">合格 ${s.pass}</b> / <b style="color:${COL.red}">不合格 ${s.fail}</b>${bt?'　('+bt+')':''}`;
+  }).catch(()=>{});
+}
+function labelBatch(label,etype,btn){
+  fetch(API+"/api/v2/monitor/label_stats").then(r=>r.json()).then(s=>{
+    if((s.unlabeled||0)===0){document.getElementById('labelMsg').innerHTML='<span style="color:'+COL.orange+'">没有未标注的 rep —— 先对着摄像头做几个再标</span>';return;}
+    if(!confirm('把当前 '+s.unlabeled+' 个未标注 rep 全部标为「'+label+(etype?'·'+etype:'')+'」？'))return;
+    document.querySelectorAll('.lbtn').forEach(b=>b.disabled=true);
+    fetch(API+"/api/v2/monitor/label_batch",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:label,error_type:etype})})
+      .then(r=>r.json()).then(d=>{
+        document.querySelectorAll('.lbtn').forEach(b=>b.disabled=false);
+        if(d.ok){document.getElementById('labelMsg').innerHTML='<span style="color:'+COL.green+'">✓ 已把 '+d.tagged+' 个标为「'+label+'」　累计 合格 '+d.pass+' / 不合格 '+d.fail+'</span>';loadLabelStats();}
+        else{document.getElementById('labelMsg').innerHTML='<span style="color:'+COL.red+'">标注失败: '+(d.error||'?')+'</span>';}
+      }).catch(()=>{document.querySelectorAll('.lbtn').forEach(b=>b.disabled=false);});
+  });
+}
+const EXES=[["squat","深蹲"],["push_up","俯卧撑"],["lunge","弓步"],["bicep_curl","二头弯举"],["shoulder_press","肩推"],["jumping_jack","开合跳"],["plank","平板"]];
+let curEx="squat",recOn=false;
+function renderCtrl(){
+  const rs=document.getElementById('recStat');if(rs)rs.innerHTML=recOn?'<b style="color:#22c55e">● 录制中</b>　<span class="muted">动作会被计数并存入数据集</span>':'<b style="color:#f59e0b">○ 预览中</b>　<span class="muted">不记录，点「开始运动」才存</span>';
+  const bs=document.getElementById('btnStart'),bp=document.getElementById('btnStop');if(bs)bs.disabled=recOn;if(bp)bp.disabled=!recOn;
+  const eb=document.getElementById('exBtns');if(eb)eb.innerHTML=EXES.map(([k,n])=>`<button class="exb${k===curEx?' on':''}" onclick="sessEx('${k}')">${n}</button>`).join('');
+}
+function loadSess(){fetch(API+"/api/v2/monitor/session").then(r=>r.json()).then(s=>{recOn=!!s.recording;curEx=s.exercise||'squat';renderCtrl();}).catch(()=>{});}
+function sessStart(){fetch(API+"/api/v2/monitor/session/start",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exercise:curEx})}).then(r=>r.json()).then(s=>{recOn=true;curEx=s.exercise||curEx;renderCtrl();}).catch(()=>{});}
+function sessStop(){fetch(API+"/api/v2/monitor/session/stop",{method:'POST'}).then(r=>r.json()).then(()=>{recOn=false;renderCtrl();}).catch(()=>{});}
+function sessEx(k){fetch(API+"/api/v2/monitor/session/exercise",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exercise:k})}).then(r=>r.json()).then(s=>{curEx=s.exercise||k;recOn=!!s.recording;renderCtrl();}).catch(()=>{});}
+pollFrame();pollState();loadHistory();loadEval();loadLabelStats();loadSess();renderCtrl();setInterval(loadHistory,5000);setInterval(loadEval,30000);setInterval(loadLabelStats,3000);setInterval(loadSess,5000);
+</script>
+</body>
+</html>

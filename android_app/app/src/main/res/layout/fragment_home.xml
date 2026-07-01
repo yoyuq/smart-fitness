@@ -190,7 +190,7 @@
                 android:id="@+id/btn_start_training"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="开始训练"
+                android:text=""
                 android:textSize="17sp"
                 android:textStyle="bold"
                 android:layout_marginTop="4dp"

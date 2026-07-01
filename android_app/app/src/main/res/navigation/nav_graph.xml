@@ -34,4 +34,29 @@
         android:id="@+id/profileFragment"
         android:name="com.smartfitness.app.ui.profile.ProfileFragment"
         android:label="@string/profile" />
+
+    <fragment
+        android:id="@+id/bodyMetricsFragment"
+        android:name="com.smartfitness.app.ui.profile.BodyMetricsFragment"
+        android:label="身体数据" />
+
+    <fragment
+        android:id="@+id/goalsFragment"
+        android:name="com.smartfitness.app.ui.profile.GoalsFragment"
+        android:label="我的目标" />
+
+    <fragment
+        android:id="@+id/fitnessAgentFragment"
+        android:name="com.smartfitness.app.ui.profile.FitnessAgentFragment"
+        android:label="专属健身Agent" />
+
+    <fragment
+        android:id="@+id/trainingDataFragment"
+        android:name="com.smartfitness.app.ui.profile.TrainingDataFragment"
+        android:label="训练数据" />
+
+    <fragment
+        android:id="@+id/planDetailFragment"
+        android:name="com.smartfitness.app.ui.plans.PlanDetailFragment"
+        android:label="计划详情" />
 </navigation>

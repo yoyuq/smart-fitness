@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.smartfitness.app.R
 import com.smartfitness.app.api.ApiClient
+import com.smartfitness.app.api.UserDataCache
 import com.smartfitness.app.ui.login.OnboardingHelper
 import kotlinx.coroutines.launch
 
@@ -42,11 +43,7 @@ class HomeFragment : Fragment() {
         calendarGrid = view.findViewById(R.id.calendar_grid)
         calendarSummary = view.findViewById(R.id.calendar_summary)
 
-        view.findViewById<View?>(R.id.btn_start_training)?.setOnClickListener {
-            requireActivity()
-                .findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_nav)
-                .selectedItemId = R.id.trainingFragment
-        }
+        view.findViewById<View?>(R.id.btn_start_training)?.visibility = View.GONE
 
         swipe.setOnRefreshListener { loadAll() }
         loadAll()
@@ -62,7 +59,13 @@ class HomeFragment : Fragment() {
         swipe.isRefreshing = true
         lifecycleScope.launch {
             try {
-                val stats = ApiClient.service.statsDaily()
+                val stats = try {
+                    val online = ApiClient.service.statsDaily()
+                    UserDataCache.syncAll(requireContext())
+                    online
+                } catch (_: Exception) {
+                    UserDataCache.statsDaily(requireContext()) ?: throw Exception("离线且没有已同步的首页数据")
+                }
                 stats.stats?.let { s ->
                     sessionsView.text = s.sessionsCount.toString()
                     minutesView.text = String.format("%.1f", s.totalMinutes)
@@ -86,13 +89,15 @@ class HomeFragment : Fragment() {
                     }
                 }
 
-                val plans = ApiClient.service.listPlans().plans
+                val plans = try { ApiClient.service.listPlans().plans }
+                            catch (_: Exception) { UserDataCache.plans(requireContext())?.plans ?: emptyList() }
                 plansContainer.removeAllViews()
 
                 // E-05: 今日身体指标卡片 (BMI + 推荐强度)
                 try {
-                    val latest = ApiClient.service.latestBodyMetric()
-                    latest.latest?.let { m ->
+                    val latest = try { ApiClient.service.latestBodyMetric() }
+                                 catch (_: Exception) { UserDataCache.latestMetric(requireContext()) }
+                    latest?.latest?.let { m ->
                         val card = TextView(requireContext())
                         val bmi = m.bmi ?: 0.0
                         val intensity = when {
@@ -110,8 +115,9 @@ class HomeFragment : Fragment() {
 
                 // E-05: 7 日运动 summary
                 try {
-                    val sum = ApiClient.service.exerciseSummary(7)
-                    if (sum.byType.isNotEmpty()) {
+                    val sum = try { ApiClient.service.exerciseSummary(7) }
+                              catch (_: Exception) { UserDataCache.exerciseSummary7(requireContext()) }
+                    if (sum?.byType?.isNotEmpty() == true) {
                         val title = TextView(requireContext())
                         title.text = "近 7 日运动"
                         title.textSize = 14f
@@ -129,8 +135,9 @@ class HomeFragment : Fragment() {
 
                 // E-06: 30 日趋势 (文本版, 按日聊 reps + 平均分)
                 try {
-                    val raw = ApiClient.service.listExerciseLog(limit = 200, days = 30)
-                    if (raw.log.isNotEmpty()) {
+                    val raw = try { ApiClient.service.listExerciseLog(limit = 200, days = 30) }
+                              catch (_: Exception) { UserDataCache.exerciseLog30(requireContext()) }
+                    if (raw?.log?.isNotEmpty() == true) {
                         val title = TextView(requireContext())
                         title.text = "近 30 日趋势"
                         title.textSize = 14f
@@ -194,7 +201,8 @@ class HomeFragment : Fragment() {
         val sum = calendarSummary ?: return
         lifecycleScope.launch {
             try {
-                val resp = ApiClient.service.calendarDays()
+                val resp = try { ApiClient.service.calendarDays() }
+                           catch (_: Exception) { UserDataCache.calendar(requireContext()) ?: return@launch }
                 val byDay = resp.days.associateBy { it.d }
                 grid.removeAllViews()
                 val ctx = requireContext()
@@ -242,8 +250,10 @@ class HomeFragment : Fragment() {
     private fun loadStreakAndAchievements() {
         lifecycleScope.launch {
             try {
-                val s = ApiClient.service.streak()
-                val ach = ApiClient.service.achievements()
+                val s = try { ApiClient.service.streak() }
+                        catch (_: Exception) { UserDataCache.streak(requireContext()) ?: return@launch }
+                val ach = try { ApiClient.service.achievements() }
+                          catch (_: Exception) { UserDataCache.achievements(requireContext()) ?: return@launch }
                 val ctx = requireContext()
                 val container = plansContainer
                 // Insert at top of plansContainer

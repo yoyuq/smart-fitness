@@ -233,10 +233,21 @@ class RepScorer:
         for _p, sfb, _k in struct:
             fb.append(sfb)
 
-        # 角度时序 (定长重采样): 供时序 AQA 模型训练. 通道 = 主角度/躯干/左右差/肩角
+        # 角度时序 (定长重采样): 供时序 AQA / 质量模型训练.
+        # 旧 4 通道(primary/torso/lr_diff/shoulder)保留向后兼容(train_aqa / rep_quality_tcn C4);
+        # 新增 13 个原始多关节通道(与 pose_data.angles_json 同名), 为"加宽输入"铺路。
         def _ch(key):
             return [(f.get("feat") or {}).get(key) for f in frames]
+        _JOINTS = {
+            "knee_L": "left_knee", "knee_R": "right_knee",
+            "hip_L": "left_hip", "hip_R": "right_hip",
+            "elbow_L": "left_elbow", "elbow_R": "right_elbow",
+            "shoulder_L": "left_shoulder", "shoulder_R": "right_shoulder",
+            "ankle_dx": "ankle_dx", "wrist_above": "wrist_above",
+            "head_drop": "head_drop", "head_fwd": "head_fwd",
+        }
         angle_series = {
+            # —— 旧 4 通道(兼容)——
             "primary": _resample(primaries),
             "torso": _resample(_ch("torso_tilt")),
             "lr_diff": _resample([f["lr_diff"] for f in frames]),
@@ -245,7 +256,11 @@ class RepScorer:
                  (f.get("feat") or {}).get("right_shoulder", 0)) / 2
                 if (f.get("feat") or {}).get("left_shoulder") is not None else None
                 for f in frames]),
+            # —— 新增多关节通道 ——
+            "torso_tilt": _resample(_ch("torso_tilt")),
         }
+        for _ok, _fk in _JOINTS.items():
+            angle_series[_ok] = _resample(_ch(_fk))
 
         rep = {
             "rep_index": len(self.rep_scores) + 1,
@@ -264,6 +279,16 @@ class RepScorer:
             "end_ts": frames[-1]["ts"],
             "angle_series": angle_series,
         }
+        # TCN 质量小模型 (best-effort, 附加字段; 无模型/无 torch/异常 一律不影响规则评分)
+        try:
+            import rep_quality_tcn
+            mq = rep_quality_tcn.score_rep_quality(angle_series, total)
+            if mq is not None:
+                rep["model_quality"] = mq
+                print(f"[TCN] {self.exercise}  model_quality={mq}  rule_total={total}", flush=True)
+        except Exception:
+            pass
+
         self.rep_scores.append(rep)
         self.last_rep = rep
         return rep
@@ -278,12 +303,21 @@ class RepScorer:
 _scorers: Dict[str, RepScorer] = {}
 
 
-def get_rep_scorer(device_id: str) -> RepScorer:
-    sc = _scorers.get(device_id or "default")
+def get_rep_scorer(device_id: str, session_id: Optional[str] = None) -> RepScorer:
+    # Scorers must be isolated per recording session. Using only device_id makes
+    # consecutive users on the same ESP32 share rep_index/state, which can make
+    # playback folders collide (rep001, rep002, ...) across sessions.
+    key = f"{device_id or 'default'}::{session_id}" if session_id else (device_id or "default")
+    sc = _scorers.get(key)
     if sc is None:
         sc = RepScorer()
-        _scorers[device_id or "default"] = sc
+        _scorers[key] = sc
     return sc
+
+
+def reset_rep_scorer(device_id: str, session_id: Optional[str] = None):
+    key = f"{device_id or 'default'}::{session_id}" if session_id else (device_id or "default")
+    _scorers.pop(key, None)
 
 
 def ensure_table(conn):
@@ -300,8 +334,8 @@ def ensure_table(conn):
             start_frame TEXT, peak_frame TEXT, end_frame TEXT,
             angle_series TEXT
         )""")
-    # 老库迁移: 补关键帧路径列 + 角度时序列
-    for col in ("start_frame", "peak_frame", "end_frame", "angle_series"):
+    # 老库迁移: 补关键帧路径列 + 角度时序列 + 唯一回放目录列
+    for col in ("start_frame", "peak_frame", "end_frame", "angle_series", "clip_id", "clip_dir"):
         try:
             conn.execute(f"ALTER TABLE rep_scores ADD COLUMN {col} TEXT")
         except Exception:

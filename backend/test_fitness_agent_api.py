@@ -168,6 +168,34 @@ def test_fitness_agent_explicit_metric_update_is_forced_to_approval(monkeypatch)
     assert data["agent_loop"].get("forced_tool") is True
 
 
+def test_fitness_agent_explicit_memory_save_is_forced_to_approval(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("explicit memory save should not depend on LLM JSON compliance")
+
+    monkeypatch.setattr("ai_planner._call_llm", fail_if_called)
+    token = auth.generate_token(_uid(), "agent_forced_memory_test")
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/api/v2/agent/chat", headers=headers, json={"message": "记住我喜欢训练后喝香蕉牛奶", "mode": "coach"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["run_status"] == "waiting_approval"
+    approval = data["pending_approvals"][0]
+    assert approval["tool_name"] == "save_coach_memory"
+    assert "香蕉牛奶" in approval["args"]["note"]
+    assert approval["args"]["kind"] in {"diet", "preference", "observation"}
+    assert data["agent_loop"].get("forced_tool") is True
+
+    ar = client.post(f"/api/v2/agent/approvals/{approval['approval_id']}/approve", headers=headers)
+    assert ar.status_code == 200
+    assert ar.json()["run_status"] == "completed"
+
+    mem = client.get("/api/v2/ai/memory", headers=headers).json()["memories"]
+    assert any("香蕉牛奶" in m["note"] for m in mem)
+
+
 def test_fitness_agent_context_compact_summarizes_old_history(monkeypatch):
     import sqlite3
     import fitness_agent

@@ -18,6 +18,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.smartfitness.app.R
 import com.smartfitness.app.api.ApiClient
+import com.smartfitness.app.app.PlanDetailHolder
 import com.smartfitness.app.app.PlanIntent
 import com.smartfitness.app.model.CreatePlanRequest
 import com.smartfitness.app.model.WorkoutPlan
@@ -192,6 +193,8 @@ class PlansFragment : Fragment() {
         val textCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            isClickable = true
+            setOnClickListener { openPlanDetail(plan) }
         }
         textCol.addView(TextView(ctx).apply {
             text = plan.name
@@ -200,7 +203,7 @@ class PlansFragment : Fragment() {
             setTextColor(ctx.getColor(R.color.on_surface))
         })
         textCol.addView(TextView(ctx).apply {
-            text = "$itemCount 个动作"
+            text = "$itemCount 个动作  ›  查看详情"
             textSize = 12f
             setTextColor(ctx.getColor(R.color.on_surface_tertiary))
             setPadding(0, UiKit.dp(ctx, 2), 0, 0)
@@ -239,6 +242,15 @@ class PlansFragment : Fragment() {
         })
         inner.addView(row)
         return cardView
+    }
+
+    private fun openPlanDetail(plan: WorkoutPlan) {
+        PlanDetailHolder.plan = plan
+        try {
+            findNavController().navigate(R.id.planDetailFragment)
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "跳转失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun startTrainingWithPlan(plan: WorkoutPlan) {
@@ -304,13 +316,7 @@ class PlansFragment : Fragment() {
                 )
                 progress.dismiss()
                 if (resp.ok && resp.plans.isNotEmpty()) {
-                    val name = "AI·$goal ${weeks}周"
-                    val exercises = resp.plans.joinToString(",", prefix = "[", postfix = "]") {
-                        """{"type":"${it.exerciseType}","sets":${it.targetSets},"reps":${it.targetReps},"note":"${(it.intensityNote ?: "").replace("\"", "")}"}"""
-                    }
-                    ApiClient.service.createPlan(
-                        com.smartfitness.app.model.CreatePlanRequest(name, exercises)
-                    )
+                    // 计划已由后端 /ai/plan_generate 直接写库(含 plan_id), 无需再次 createPlan, 避免重复
                     Toast.makeText(ctx, "AI 计划已生成: ${resp.plans.size} 项", Toast.LENGTH_LONG).show()
                     loadPlans()
                 } else {

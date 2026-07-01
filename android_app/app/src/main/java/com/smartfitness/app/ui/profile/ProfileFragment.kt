@@ -18,6 +18,7 @@ import com.google.android.material.button.MaterialButton
 import com.smartfitness.app.R
 import com.smartfitness.app.ui.UiKit
 import com.smartfitness.app.api.ApiClient
+import com.smartfitness.app.api.UserDataCache
 import com.smartfitness.app.model.BindDeviceRequest
 import com.smartfitness.app.model.BodyMetricRequest
 import com.smartfitness.app.model.DeviceRegisterRequest
@@ -113,50 +114,6 @@ class ProfileFragment : Fragment() {
                 setPadding(UiKit.dp(ctx, 4), 0, 0, UiKit.dp(ctx, 12))
             }.also { addView(it) }
 
-            // ===== AI 私人教练横幅 (Keep 会员位) =====
-            val banner = com.google.android.material.card.MaterialCardView(ctx).apply {
-                radius = UiKit.dp(ctx, 16).toFloat()
-                cardElevation = 0f
-                setCardBackgroundColor(ctx.getColor(R.color.on_surface))
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = UiKit.dp(ctx, 12) }
-            }
-            val bannerRow = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(UiKit.dp(ctx, 20), UiKit.dp(ctx, 16), UiKit.dp(ctx, 16), UiKit.dp(ctx, 16))
-            }
-            val bannerCol = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            bannerCol.addView(TextView(ctx).apply {
-                text = "AI 私人教练"
-                textSize = 16f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(0xFFFFFFFF.toInt())
-            })
-            bannerCol.addView(TextView(ctx).apply {
-                text = "懂你数据和身体的专属教练"
-                textSize = 12f
-                setTextColor(0xFFA1A1B5.toInt())
-                setPadding(0, 2, 0, 0)
-            })
-            bannerRow.addView(bannerCol)
-            bannerRow.addView(MaterialButton(ctx).apply {
-                text = "去复盘"
-                textSize = 13f
-                cornerRadius = UiKit.dp(ctx, 18)
-                minWidth = 0
-                minimumWidth = 0
-                setPadding(UiKit.dp(ctx, 20), 0, UiKit.dp(ctx, 20), 0)
-                setOnClickListener { showCoachReview() }
-            })
-            banner.addView(bannerRow)
-            addView(banner)
-
             // ===== 功能宫格 (4 列 x 2 行) =====
             UiKit.card(ctx).let { (cardView, inner) ->
                 val grid = android.widget.GridLayout(ctx).apply { columnCount = 4 }
@@ -186,13 +143,11 @@ class ProfileFragment : Fragment() {
                     })
                     grid.addView(cellBox)
                 }
-                cell(R.drawable.ic_g_body, "身体指标") { showBodyMetricDialog() }
-                cell(R.drawable.ic_g_goal, "我的目标") { showGoalsDialog() }
-                cell(R.drawable.ic_g_memory, "教练记忆") { showAddMemoryDialog() }
-                cell(R.drawable.ic_g_trophy, "成就") { showAchievementsDialog() }
-                cell(R.drawable.ic_g_device, "绑定设备") { showBindDialog() }
-                cell(R.drawable.ic_g_export, "导出数据") { exportCsv() }
-                cell(R.drawable.ic_g_server, "服务器") { showBaseUrlDialog() }
+                cell(R.drawable.ic_g_body, "身体指标") { findNavController().navigate(R.id.bodyMetricsFragment) }
+                cell(R.drawable.ic_g_sync, "同步信息") { syncUserData() }
+                cell(R.drawable.ic_g_goal, "我的目标") { findNavController().navigate(R.id.goalsFragment) }
+                cell(R.drawable.ic_g_training_data, "训练数据") { findNavController().navigate(R.id.trainingDataFragment) }
+                cell(R.drawable.ic_g_server, "设置") { showSettingsDialog() }
                 cell(R.drawable.ic_g_logout, "退出登录", R.color.error) {
                     ApiClient.clearAuth()
                     findNavController().navigate(R.id.loginFragment, null,
@@ -264,7 +219,7 @@ class ProfileFragment : Fragment() {
                     setPadding(0, UiKit.dp(ctx, 8), 0, 0)
                 }.also { inner.addView(it) }
                 cardView.isClickable = true
-                cardView.setOnClickListener { showBodyMetricDialog() }
+                cardView.setOnClickListener { findNavController().navigate(R.id.bodyMetricsFragment) }
                 dataRow.addView(cardView)
             }
             addView(dataRow)
@@ -315,9 +270,11 @@ class ProfileFragment : Fragment() {
     private fun loadHeaderChips() {
         lifecycleScope.launch {
             try {
-                val s = ApiClient.service.streak()
-                val ach = ApiClient.service.achievements()
-                if (!isAdded) return@launch
+                val s = try { ApiClient.service.streak() }
+                        catch (_: Exception) { UserDataCache.streak(requireContext()) }
+                val ach = try { ApiClient.service.achievements() }
+                          catch (_: Exception) { UserDataCache.achievements(requireContext()) }
+                if (!isAdded || s == null || ach == null) return@launch
                 chipsRow.removeAllViews()
                 addChip("⚡ 连续 ${s.currentStreak} 天")
                 addChip("最长 ${s.longestStreak} 天")
@@ -329,8 +286,9 @@ class ProfileFragment : Fragment() {
     private fun loadWeekBars() {
         lifecycleScope.launch {
             try {
-                val resp = ApiClient.service.calendarDays()
-                if (!isAdded) return@launch
+                val resp = try { ApiClient.service.calendarDays() }
+                           catch (_: Exception) { UserDataCache.calendar(requireContext()) }
+                if (!isAdded || resp == null) return@launch
                 val ctx = requireContext()
                 val byDay = resp.days.associateBy { it.d }
                 val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -358,8 +316,9 @@ class ProfileFragment : Fragment() {
     private fun loadRecent() {
         lifecycleScope.launch {
             try {
-                val raw = ApiClient.service.listExerciseLog(limit = 3, days = 90)
-                if (!isAdded) return@launch
+                val raw = try { ApiClient.service.listExerciseLog(limit = 3, days = 90) }
+                          catch (_: Exception) { UserDataCache.exerciseLog30(requireContext()) }
+                if (!isAdded || raw == null) return@launch
                 val ctx = requireContext()
                 recentContainer.removeAllViews()
                 if (raw.log.isEmpty()) {
@@ -589,14 +548,51 @@ class ProfileFragment : Fragment() {
     private fun loadProfile() {
         lifecycleScope.launch {
             try {
-                val p = ApiClient.service.profile()
+                val p = try { ApiClient.service.profile() }
+                        catch (_: Exception) { UserDataCache.profile(requireContext()) ?: throw Exception("离线且没有已同步的用户信息") }
                 p.user?.let {
                     usernameView.text = it.username
                     createdAtView.text = "加入于 ${formatTimestamp(it.createdAt)}"
                     avatarView.text = it.username.take(1).uppercase()
                 }
+            } catch (_: Exception) {
+                usernameView.text = ApiClient.username ?: "离线用户"
+                createdAtView.text = "点击“同步信息”连接服务器刷新"
+                avatarView.text = (ApiClient.username ?: "U").take(1).uppercase()
+            }
+        }
+    }
+
+    private fun syncUserData() {
+        val ctx = requireContext()
+        Toast.makeText(ctx, "正在连接服务器同步…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { UserDataCache.syncAll(ctx) }
+
+                loadBodyMetric()
+                loadHeaderChips()
+                loadWeekBars()
+                loadRecent()
+                loadGoals()
+                loadAchievements()
+
+                if (isAdded) {
+                    Toast.makeText(
+                        ctx,
+                        "同步完成：${result.sessions} 次训练，${result.totalReps} reps，已刷新 ${result.okCount} 类数据",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Profile load failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                if (isAdded) {
+                    AlertDialog.Builder(ctx)
+                        .setTitle("同步失败")
+                        .setMessage("无法连接服务器或接口不可用。\n\n当前服务器：${ApiClient.BASE_URL}\n\n请确认电脑后台已启动、手机和电脑在同一网络，或在“服务器”里修改地址。\n\n错误：${e.message}")
+                        .setPositiveButton("设置服务器") { _, _ -> showBaseUrlDialog() }
+                        .setNegativeButton("知道了", null)
+                        .show()
+                }
             }
         }
     }
@@ -647,7 +643,8 @@ class ProfileFragment : Fragment() {
     private fun loadBodyMetric() {
         lifecycleScope.launch {
             try {
-                val r = ApiClient.service.latestBodyMetric()
+                val r = try { ApiClient.service.latestBodyMetric() }
+                        catch (_: Exception) { UserDataCache.latestMetric(requireContext()) ?: return@launch }
                 val m = r.latest
                 bodyMetricView.text = if (m?.weightKg == null) "点击记录"
                                       else "${m.weightKg} 公斤"
@@ -748,6 +745,20 @@ class ProfileFragment : Fragment() {
                     } catch (e: Exception) {
                         Toast.makeText(ctx, "错误: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showSettingsDialog() {
+        val ctx = requireContext()
+        AlertDialog.Builder(ctx)
+            .setTitle("设置")
+            .setItems(arrayOf("服务器地址", "绑定设备")) { _, which ->
+                when (which) {
+                    0 -> showBaseUrlDialog()
+                    1 -> showBindDialog()
                 }
             }
             .setNegativeButton("取消", null)

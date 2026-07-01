@@ -19,11 +19,15 @@ import com.smartfitness.app.api.ApiClient
 import com.smartfitness.app.model.AgentChatMessage
 import com.smartfitness.app.model.AgentChatRequest
 import com.smartfitness.app.model.AgentNutritionPlanRequest
+import com.smartfitness.app.model.AgentRun
 import com.smartfitness.app.model.AgentToolApproval
 import com.smartfitness.app.ui.UiKit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class FitnessAgentFragment : Fragment() {
     private lateinit var chatContainer: LinearLayout
@@ -43,6 +47,18 @@ class FitnessAgentFragment : Fragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.END
         }
+        actionRow.addView(UiKit.outlinedButton(ctx, "运行记录") { showRunsDialog() }.apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                rightMargin = UiKit.dp(ctx, 8)
+                bottomMargin = UiKit.dp(ctx, 8)
+            }
+        })
+        actionRow.addView(UiKit.outlinedButton(ctx, "刷新审批") { loadPendingApprovals(showEmptyToast = true) }.apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                rightMargin = UiKit.dp(ctx, 8)
+                bottomMargin = UiKit.dp(ctx, 8)
+            }
+        })
         actionRow.addView(UiKit.outlinedButton(ctx, "清空对话") { confirmClearHistory() }.apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiKit.dp(ctx, 8)
@@ -52,7 +68,7 @@ class FitnessAgentFragment : Fragment() {
 
         val intro = UiKit.card(ctx)
         intro.second.addView(UiKit.cardTitle(ctx, "一个懂你数据的健身助手"))
-        intro.second.addView(UiKit.caption(ctx, "包含 AI 训练计划、AI 运动数据分析、AI 专属教练、AI 营养师。会读取你的身体指标、训练数据和训练计划。"))
+        intro.second.addView(UiKit.caption(ctx, "包含 AI 训练计划、AI 运动数据分析、AI 专属教练、AI 营养师。会读取你的身体指标、训练数据和训练计划；保存长期记忆、改身体指标、创建/删除计划前都会先弹窗让你确认。"))
         root.addView(intro.first)
 
         val quickRow1 = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
@@ -63,6 +79,10 @@ class FitnessAgentFragment : Fragment() {
         quickRow2.addView(quickButton("生成训练计划") { ask("plan", "请根据我的身体数据和训练记录，生成一个适合我的训练计划。") })
         quickRow2.addView(quickButton("专属教练建议") { ask("coach", "请以专属教练身份，结合我的动作表现给我今天的训练建议。") })
         root.addView(quickRow2)
+        val quickRow3 = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        quickRow3.addView(quickButton("记住偏好") { showMemoryDialog() })
+        quickRow3.addView(quickButton("审批写入") { loadPendingApprovals(showEmptyToast = true) })
+        root.addView(quickRow3)
 
         val scroll = ScrollView(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
@@ -164,14 +184,19 @@ class FitnessAgentFragment : Fragment() {
         }
     }
 
-    private fun loadPendingApprovals() {
+    private fun loadPendingApprovals(showEmptyToast: Boolean = false) {
         lifecycleScope.launch {
             try {
                 val res = withContext(Dispatchers.IO) { ApiClient.service.fitnessAgentApprovals(limit = 10) }
                 if (res.ok && res.approvals.isNotEmpty()) {
                     handleApprovals(res.approvals)
+                } else if (showEmptyToast && isAdded) {
+                    Toast.makeText(requireContext(), "暂无待审批操作", Toast.LENGTH_SHORT).show()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (showEmptyToast && isAdded) {
+                    Toast.makeText(requireContext(), "审批加载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -203,6 +228,84 @@ class FitnessAgentFragment : Fragment() {
         }
     }
 
+    private fun showMemoryDialog() {
+        val edit = EditText(requireContext()).apply {
+            hint = "例如：我不喜欢空腹跑步 / 膝盖偶尔疼 / 食堂偏好高碳水"
+            minLines = 2
+            maxLines = 4
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("让 Agent 记住什么？")
+            .setMessage("提交后不会立刻写入，会先创建一条审批，确认后才保存到长期记忆。")
+            .setView(edit)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("提交") { _, _ ->
+                val note = edit.text?.toString()?.trim().orEmpty()
+                if (note.isNotEmpty()) ask("coach", "记住：$note")
+            }
+            .show()
+    }
+
+    private fun showRunsDialog() {
+        lifecycleScope.launch {
+            try {
+                val res = withContext(Dispatchers.IO) { ApiClient.service.fitnessAgentRuns(limit = 10) }
+                if (!res.ok) {
+                    Toast.makeText(requireContext(), res.error ?: "运行记录加载失败", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                if (res.runs.isEmpty()) {
+                    Toast.makeText(requireContext(), "暂无运行记录", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val items = res.runs.map { run ->
+                    val time = run.createdAt?.let { formatTime(it) } ?: "未知时间"
+                    "${time} · ${run.status}\n${run.userMessage.orEmpty().take(36)}"
+                }.toTypedArray()
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Agent 运行记录")
+                    .setItems(items) { _, which -> showRunDetail(res.runs[which]) }
+                    .setNegativeButton("关闭", null)
+                    .show()
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "运行记录加载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showRunDetail(run: AgentRun) {
+        lifecycleScope.launch {
+            try {
+                val detail = withContext(Dispatchers.IO) { ApiClient.service.fitnessAgentRunDetail(run.runId) }
+                val r = detail.run ?: run
+                val text = buildString {
+                    append("状态：").append(r.status).append('\n')
+                    append("模式：").append(r.mode ?: "auto").append('\n')
+                    append("时间：").append(r.createdAt?.let { formatTime(it) } ?: "未知").append("\n\n")
+                    append("用户请求：\n").append(r.userMessage ?: "").append("\n\n")
+                    if (r.domains.isNotEmpty()) append("领域：").append(r.domains.joinToString(" / ")).append("\n\n")
+                    if (r.todos.isNotEmpty()) {
+                        append("TODO：\n")
+                        r.todos.forEach { append("- [").append(it.status).append("] ").append(it.content).append('\n') }
+                        append('\n')
+                    }
+                    if (r.pendingApprovalIds.isNotEmpty()) append("待审批：").append(r.pendingApprovalIds.size).append(" 项\n\n")
+                    append("最终回复：\n").append(r.finalText ?: "")
+                }
+                AlertDialog.Builder(requireContext())
+                    .setTitle("运行详情")
+                    .setMessage(text)
+                    .setPositiveButton("确定", null)
+                    .show()
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "详情加载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun formatTime(ts: Long): String =
+        SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(ts * 1000))
+
     private fun ask(mode: String, msg: String) {
         addUserMessage(msg)
         addAgentMessage("Agent 正在汇总你的数据和相关知识库…")
@@ -211,7 +314,9 @@ class FitnessAgentFragment : Fragment() {
                 val req = AgentChatRequest(message = msg, mode = mode, history = history.takeLast(8))
                 val res = withContext(Dispatchers.IO) { ApiClient.service.fitnessAgentChat(req) }
                 val domains = if (res.domains.isNotEmpty()) "\n\n已调用知识库: ${res.domains.joinToString(" / ")}" else ""
-                val reply = (res.reply ?: res.error ?: "生成失败") + domains
+                val status = if (!res.runStatus.isNullOrBlank()) "\n运行状态: ${res.runStatus}" else ""
+                val todos = res.agentLoop?.todos?.takeIf { it.isNotEmpty() }?.joinToString("\n", prefix = "\n\n任务进度:\n") { "- [${it.status}] ${it.content}" } ?: ""
+                val reply = (res.reply ?: res.error ?: "生成失败") + domains + status + todos
                 replaceLastAgentMessage(reply)
                 if (res.runStatus == "waiting_approval" && res.pendingApprovals.isEmpty()) {
                     loadPendingApprovals()
@@ -233,6 +338,7 @@ class FitnessAgentFragment : Fragment() {
         if (approval.approvalId.isBlank()) return
         val details = buildString {
             append(approval.summary.ifBlank { approval.reason })
+            if (!approval.runId.isNullOrBlank()) append("\n\nRun: ").append(approval.runId)
             if (approval.args.isNotEmpty()) {
                 append("\n\n参数：")
                 approval.args.forEach { (k, v) -> append("\n- ").append(k).append(": ").append(v) }

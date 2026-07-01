@@ -90,12 +90,12 @@ def infer_memory_kind(note: str, category: Optional[str] = None) -> str:
     zh = note or ""
     if any(w in text for w in ["goal", "target", "aim", "want to", "plan to"]) or any(w in zh for w in ["目标", "想要", "计划", "希望", "冲刺"]):
         return "goal"
+    if any(w in text for w in ["diet", "meal", "protein", "carb", "calorie", "breakfast", "milk", "banana", "drink", "beverage"]) or any(w in zh for w in ["饮食", "食堂", "蛋白", "碳水", "热量", "早餐", "午餐", "晚餐", "牛奶", "饮品", "饭"]):
+        return "diet"
     if any(w in text for w in ["prefer", "like", "dislike", "hate", "avoid"]) or any(w in zh for w in ["偏好", "喜欢", "不喜欢", "讨厌", "避免"]):
         return "preference"
     if any(w in text for w in ["injury", "pain", "hurt", "sore", "knee", "ankle", "shoulder"]) or any(w in zh for w in ["伤", "疼", "痛", "膝", "踝", "肩", "腰"]):
         return "injury"
-    if any(w in text for w in ["diet", "meal", "protein", "carb", "calorie", "breakfast"]) or any(w in zh for w in ["饮食", "食堂", "蛋白", "碳水", "热量", "早餐", "午餐", "晚餐"]):
-        return "diet"
     if any(w in text for w in ["run", "workout", "training", "squat", "push-up", "pull-up"]) or any(w in zh for w in ["训练", "跑步", "深蹲", "俯卧撑", "引体", "动作模式", "习惯"]):
         return "training_pattern"
     return "observation"

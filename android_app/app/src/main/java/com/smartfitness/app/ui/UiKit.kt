@@ -38,6 +38,35 @@ object UiKit {
         return cardView to inner
     }
 
+    /** 详情页顶部栏: 返回箭头 + 标题 */
+    fun topBar(ctx: Context, title: String, onBack: () -> Unit): LinearLayout {
+        val bar = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, dp(ctx, 2), 0, dp(ctx, 12))
+        }
+        bar.addView(TextView(ctx).apply {
+            text = "←"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setTextColor(ctx.getColor(R.color.on_surface))
+            gravity = android.view.Gravity.CENTER
+            val sz = dp(ctx, 40)
+            layoutParams = LinearLayout.LayoutParams(sz, sz).apply { rightMargin = dp(ctx, 4) }
+            isClickable = true
+            val tv = TypedValue()
+            ctx.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tv, true)
+            setBackgroundResource(tv.resourceId)
+            setOnClickListener { onBack() }
+        })
+        bar.addView(TextView(ctx).apply {
+            text = title
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(ctx.getColor(R.color.on_surface))
+        })
+        return bar
+    }
+
     fun cardTitle(ctx: Context, text: String): TextView = TextView(ctx).apply {
         this.text = text
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)

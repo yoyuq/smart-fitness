@@ -151,6 +151,12 @@ interface ApiService {
     @POST("api/v2/agent/nutrition_plan")
     suspend fun fitnessAgentNutrition(@Body req: com.smartfitness.app.model.AgentNutritionPlanRequest): com.smartfitness.app.model.AgentChatResponse
 
+    @GET("api/v2/agent/runs")
+    suspend fun fitnessAgentRuns(@Query("limit") limit: Int = 20): com.smartfitness.app.model.AgentRunListResponse
+
+    @GET("api/v2/agent/runs/{run_id}")
+    suspend fun fitnessAgentRunDetail(@Path("run_id") runId: String): com.smartfitness.app.model.AgentRunDetailResponse
+
     // ---------- AI Coach Butler: 复盘 + 教练记忆 (2026-06-11) ----------
     @POST("api/v2/ai/coach_review")
     suspend fun coachReview(): CoachReviewResponse

@@ -8,7 +8,8 @@ from mediapipe.tasks.python.vision import PoseLandmarker, PoseLandmarkerOptions,
 
 log = logging.getLogger("pose_engine")
 
-DATASET_DIR = r"C:\Users\hjl\.openclaw\workspace\smart_fitness\datasets\models"
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATASET_DIR = os.path.join(PROJECT_ROOT, "datasets", "models")
 CLASSIFIER_PATH = os.path.join(DATASET_DIR, "pose_classifier.pkl")
 LANDMARKER_PATH = os.path.join(DATASET_DIR, "pose_landmarker_lite.task")
 
@@ -206,6 +207,96 @@ def posture_matches_exercise(angles, exercise) -> bool:
     if exercise in _PRONE_EXERCISES:
         return a >= _PRONE_MIN_TILT
     return a <= _UPRIGHT_MAX_TILT
+
+
+# ============ 多参数"动作签名"识别 ============
+# 不再只看 torso_tilt 一个参数, 而是按每个动作的关键点组合判定"用户是不是在做这个动作".
+# hard=True 的条件构成"是否计数"的门禁; 缺失参数一律放行(不误杀). 每条都带值, 可在监控台展示.
+def _sig_params(ang):
+    def avg(a, b):
+        vs = [v for v in (ang.get(a), ang.get(b)) if v is not None]
+        return sum(vs) / len(vs) if vs else None
+    kL, kR = ang.get("knee_L"), ang.get("knee_R")
+    t = ang.get("torso_tilt")
+    return {
+        "knee": avg("knee_L", "knee_R"), "hip": avg("hip_L", "hip_R"),
+        "elbow": avg("elbow_L", "elbow_R"), "shoulder": avg("shoulder_L", "shoulder_R"),
+        "knee_diff": (abs(kL - kR) if (kL is not None and kR is not None) else None),
+        "torso": (abs(float(t)) if t is not None else None),
+        "ankle_dx": ang.get("ankle_dx"), "wrist_above": ang.get("wrist_above"),
+        "head_drop": ang.get("head_drop"),
+    }
+
+
+def _le(v, lim): return (v is None) or (v <= lim)     # 缺失放行
+def _ge(v, lim): return (v is None) or (v >= lim)
+
+
+# 每个动作: [(参数名, hard?, 判定 lambda(p)->bool, 取值 lambda(p)->显示值), ...]
+_SIGNATURE = {
+    "squat": [
+        ("直立(非趴姿)", True,  lambda p: _le(p["torso"], 62),        lambda p: p["torso"]),
+        ("双腿对称(非弓步)", True, lambda p: _le(p["knee_diff"], 50),    lambda p: p["knee_diff"]),
+        ("手未举过头(非肩推/开合跳)", True, lambda p: _le(p["wrist_above"], 0.30), lambda p: p["wrist_above"]),
+        ("膝参与下蹲", False,  lambda p: _le(p["knee"], 150),         lambda p: p["knee"]),
+        ("髋部下沉", False,    lambda p: _le(p["hip"], 130),          lambda p: p["hip"]),
+    ],
+    "push_up": [
+        ("趴姿(身体接近水平)", True, lambda p: _ge(p["torso"], 50),     lambda p: p["torso"]),
+        ("肘部弯曲下放", False, lambda p: _le(p["elbow"], 120),        lambda p: p["elbow"]),
+        ("身体保持一条直线", False, lambda p: _ge(p["hip"], 150),       lambda p: p["hip"]),
+    ],
+    "plank": [
+        ("趴姿(身体水平)", True, lambda p: _ge(p["torso"], 50),        lambda p: p["torso"]),
+        ("身体保持一条直线", False, lambda p: _ge(p["hip"], 150),       lambda p: p["hip"]),
+    ],
+    "lunge": [
+        ("直立(非趴姿)", True,  lambda p: _le(p["torso"], 62),        lambda p: p["torso"]),
+        ("手未举过头", True,    lambda p: _le(p["wrist_above"], 0.30), lambda p: p["wrist_above"]),
+        ("单腿前弓(左右膝差异)", False, lambda p: _ge(p["knee_diff"], 20), lambda p: p["knee_diff"]),
+    ],
+    "bicep_curl": [
+        ("直立(非趴姿)", True,  lambda p: _le(p["torso"], 62),        lambda p: p["torso"]),
+        ("双腿基本伸直(非深蹲)", True, lambda p: _ge(p["knee"], 140),   lambda p: p["knee"]),
+        ("手未举过头(非肩推)", True, lambda p: _le(p["wrist_above"], 0.25), lambda p: p["wrist_above"]),
+        ("肘部弯举", False,    lambda p: _le(p["elbow"], 120),        lambda p: p["elbow"]),
+    ],
+    "shoulder_press": [
+        ("直立(非趴姿)", True,  lambda p: _le(p["torso"], 62),        lambda p: p["torso"]),
+        ("双腿基本伸直", True,  lambda p: _ge(p["knee"], 140),         lambda p: p["knee"]),
+        ("手臂上举过头", False, lambda p: _ge(p["wrist_above"], -0.10), lambda p: p["wrist_above"]),
+    ],
+    "jumping_jack": [
+        ("直立(非趴姿)", True,  lambda p: _le(p["torso"], 62),        lambda p: p["torso"]),
+        ("双腿基本伸直(非下蹲)", True, lambda p: _ge(p["knee"], 140),   lambda p: p["knee"]),
+        ("手臂举起", False,    lambda p: _ge(p["wrist_above"], -0.10), lambda p: p["wrist_above"]),
+        ("双脚打开", False,    lambda p: _ge(p["ankle_dx"], 0.90),    lambda p: p["ankle_dx"]),
+    ],
+}
+
+
+def match_exercise_signature(exercise, angles):
+    """多参数判定: 该帧体态是否符合目标动作. 返回 {ok, score, params:[{name,ok,hard,val}]}.
+    ok = 所有 hard 条件通过(用作计数门禁); score = 通过条件比例(含 soft, 0~1)."""
+    spec = _SIGNATURE.get(exercise)
+    if not spec or not angles:
+        return {"ok": True, "score": 1.0, "exercise": exercise, "params": []}
+    p = _sig_params(angles)
+    params = []
+    hard_ok = True
+    npass = 0
+    for name, hard, check, getv in spec:
+        try:
+            ok = bool(check(p)); v = getv(p)
+        except Exception:
+            ok, v = True, None
+        if ok:
+            npass += 1
+        if hard and not ok:
+            hard_ok = False
+        params.append({"name": name, "ok": ok, "hard": hard,
+                       "val": (round(float(v), 2) if isinstance(v, (int, float)) else None)})
+    return {"ok": hard_ok, "score": round(npass / len(spec), 2), "exercise": exercise, "params": params}
 
 
 def apply_score_gate(score, feedback, valid, quality):

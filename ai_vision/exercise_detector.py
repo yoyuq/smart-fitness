@@ -13,10 +13,53 @@ Supported exercises:
   - plank, bicep_curl, shoulder_press
 """
 
+import os
+import json
 import time
+import logging
 import numpy as np
 from typing import Optional, Dict, List, Tuple
 from enum import Enum
+
+_log = logging.getLogger("exercise_detector")
+
+# rep 计数默认配置（与历史运行值一致，保证 exercises.json 缺失时行为不变）。
+# joint 仅作文档说明，关节角度的实际选取仍在各 count_* 方法里。
+_DEFAULT_COUNT_CFG: Dict[str, Dict[str, float]] = {
+    "squat":          {"joint": "avg_knee",     "down": 130, "up": 145},
+    "push_up":        {"joint": "avg_elbow",    "down": 90,  "up": 150},
+    "jumping_jack":   {"joint": "avg_elbow",    "down": 120, "up": 165},
+    "lunge":          {"joint": "min_knee",     "down": 100, "up": 145},
+    "bicep_curl":     {"joint": "avg_elbow",    "down": 110, "up": 35},
+    "shoulder_press": {"joint": "avg_shoulder", "down": 30,  "up": 130},
+}
+_DEFAULT_REQUIRED_FRAMES = 1
+_CONFIG_FILENAME = "exercises.json"
+
+
+def load_count_config() -> Tuple[Dict[str, Dict[str, float]], int]:
+    """读取同目录 exercises.json 覆盖默认阈值。任何错误都回退默认，绝不抛出。"""
+    cfg = {k: dict(v) for k, v in _DEFAULT_COUNT_CFG.items()}
+    required_frames = _DEFAULT_REQUIRED_FRAMES
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), _CONFIG_FILENAME)
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            required_frames = int(data.get("required_frames", required_frames))
+            for name, ov in (data.get("exercises") or {}).items():
+                if not isinstance(ov, dict):
+                    continue
+                entry = cfg.get(name, {"joint": ov.get("joint", "avg_elbow")})
+                if "down" in ov:  entry["down"] = float(ov["down"])
+                if "up" in ov:    entry["up"] = float(ov["up"])
+                if "joint" in ov: entry["joint"] = ov["joint"]
+                cfg[name] = entry
+            _log.info("exercise_detector: loaded %d exercises from %s (required_frames=%d)",
+                      len(cfg), _CONFIG_FILENAME, required_frames)
+    except Exception as e:
+        _log.warning("exercise_detector: exercises.json load failed (%s), using defaults", e)
+    return cfg, required_frames
 
 
 class ExerciseType(Enum):
@@ -48,27 +91,22 @@ class ExerciseDetector:
       - A state machine for rep counting
     """
 
-    _THRESHOLDS = {
-        ExerciseType.JUMPING_JACK: {'down': 120, 'up': 165},
-        ExerciseType.BICEP_CURL: {'down': 110, 'up': 35},
-        ExerciseType.SHOULDER_PRESS: {'down': 30, 'up': 130},
-        ExerciseType.SQUAT: {'down': 110, 'up': 150},
-        ExerciseType.PUSH_UP: {'down': 90, 'up': 150},
-        ExerciseType.LUNGE: {'down': 100, 'up': 145},
-        ExerciseType.PLANK: {'body_angle': 20},
-    }
-
     def __init__(self):
         self.current_exercise = ExerciseType.IDLE
         self.rep_count = 0
         self.stage = RepStage.UP
         self._consecutive_frames_down = 0
         self._consecutive_frames_up = 0
-        # 1 帧确认: 预览仅 ~2fps, 一个动作相位常只采到 1 帧, 要求连续 2 帧会漏计
-        # (2026-06-13 真实视频诊断: rf=2 俯卧撑/弓步/开合跳大量漏到 0, rf=1 恢复).
-        # 去抖由 down/up 阈值之间的角度间隙保证 (如深蹲 110/150 = 40° 带) + 状态机
-        # 必须走完整 UP->DOWN->UP 循环才计一次, 双重防止抖动重复计数, 不靠帧数.
-        self._required_frames = 1
+        self._angle_hist: List[float] = []   # 主角度近 3 帧, 做中值平滑滤单帧噪声尖刺
+        # 按谷计数状态(正常方向动作: 角度在底部变小, 深蹲/俯卧撑/弓步)
+        self._v_phase = "asc"        # asc=上升/找峰, desc=下降/找谷
+        self._v_extreme: Optional[float] = None   # 当前段的极值(谷或峰)
+        self._v_deep = False         # 本次下蹲是否到过"够深"(谷 <= 深度门槛)
+        # rep 计数阈值改为外置配置 ai_vision/exercises.json（借鉴 Good-GYM），缺失则回退默认。
+        # _required_frames: 相位确认所需连续帧数。预览仅 ~2fps, 一个动作相位常只采到 1 帧,
+        # 要求连续 2 帧会漏计 (2026-06-13 真实视频诊断: rf=2 大量漏到 0, rf=1 恢复)。
+        # 去抖由 down/up 阈值间隙 + 完整 UP->DOWN->UP 循环保证, 不靠帧数。
+        self._count_cfg, self._required_frames = load_count_config()
         self._history: List[Tuple[ExerciseType, float, int]] = []  # (exercise, timestamp, rep)
         self._target_exercise: Optional[ExerciseType] = None
         self._max_history = 10000  # cap to prevent unbounded growth
@@ -83,6 +121,8 @@ class ExerciseDetector:
         self.stage = RepStage.UP
         self._consecutive_frames_down = 0
         self._consecutive_frames_up = 0
+        self._angle_hist = []
+        self._v_phase = "asc"; self._v_extreme = None; self._v_deep = False
 
     def get_target_exercise(self) -> Optional[ExerciseType]:
         """Return the currently targeted exercise, or None if no filter is active."""
@@ -205,6 +245,12 @@ class ExerciseDetector:
         vals = [v for v in [a, b] if v is not None]
         return np.mean(vals) if vals else None
 
+    def _thr(self, name: str) -> Tuple[float, float]:
+        """从外置配置取该动作的 (down, up) 阈值, 缺失回退默认。"""
+        c = self._count_cfg.get(name) or _DEFAULT_COUNT_CFG.get(name, {})
+        d = _DEFAULT_COUNT_CFG.get(name, {})
+        return float(c.get("down", d.get("down", 90))), float(c.get("up", d.get("up", 150)))
+
     def _update_exercise(self, exercise: ExerciseType):
         """Update current exercise tracking."""
         if exercise != self.current_exercise and exercise != ExerciseType.IDLE:
@@ -216,6 +262,8 @@ class ExerciseDetector:
             self.stage = RepStage.UP
             self._consecutive_frames_down = 0
             self._consecutive_frames_up = 0
+            self._angle_hist = []
+            self._v_phase = "asc"; self._v_extreme = None; self._v_deep = False
 
     def count_squat(self, angles: Dict[str, Optional[float]]) -> int:
         """Count squat reps using average knee angle."""
@@ -225,10 +273,8 @@ class ExerciseDetector:
         if avg_knee is None:
             return self.rep_count
 
-        return self._count_with_threshold(
-            avg_knee, ExerciseType.SQUAT,
-            down_threshold=130, up_threshold=145
-        )
+        down, up = self._thr("squat")
+        return self._count_with_threshold(avg_knee, ExerciseType.SQUAT, down, up)
 
     def count_push_up(self, angles: Dict[str, Optional[float]]) -> int:
         """Count push-up reps using average elbow angle."""
@@ -238,10 +284,8 @@ class ExerciseDetector:
         if avg_elbow is None:
             return self.rep_count
 
-        return self._count_with_threshold(
-            avg_elbow, ExerciseType.PUSH_UP,
-            down_threshold=90, up_threshold=150
-        )
+        down, up = self._thr("push_up")
+        return self._count_with_threshold(avg_elbow, ExerciseType.PUSH_UP, down, up)
 
     def count_jumping_jack(self, angles: Dict[str, Optional[float]]) -> int:
         """Count jumping jack reps using elbow angle."""
@@ -250,8 +294,8 @@ class ExerciseDetector:
         avg_elbow = self._safe_avg(left_elbow, right_elbow)
         if avg_elbow is None:
             return self.rep_count
-        t = self._THRESHOLDS[ExerciseType.JUMPING_JACK]
-        return self._count_with_threshold(avg_elbow, ExerciseType.JUMPING_JACK, t['down'], t['up'])
+        down, up = self._thr("jumping_jack")
+        return self._count_with_threshold(avg_elbow, ExerciseType.JUMPING_JACK, down, up)
 
     def count_lunge(self, angles: Dict[str, Optional[float]]) -> int:
         """Count lunge reps using the more-bent knee."""
@@ -265,10 +309,8 @@ class ExerciseDetector:
             v for v in [left_knee, right_knee] if v is not None
         )
 
-        return self._count_with_threshold(
-            min_knee, ExerciseType.LUNGE,
-            down_threshold=100, up_threshold=145
-        )
+        down, up = self._thr("lunge")
+        return self._count_with_threshold(min_knee, ExerciseType.LUNGE, down, up)
 
     def count_bicep_curl(self, angles: Dict[str, Optional[float]]) -> int:
         """Count bicep curl reps using average elbow angle."""
@@ -278,8 +320,8 @@ class ExerciseDetector:
         if avg_elbow is None:
             return self.rep_count
 
-        t = self._THRESHOLDS[ExerciseType.BICEP_CURL]
-        return self._count_with_threshold(avg_elbow, ExerciseType.BICEP_CURL, t['down'], t['up'])
+        down, up = self._thr("bicep_curl")
+        return self._count_with_threshold(avg_elbow, ExerciseType.BICEP_CURL, down, up)
 
     def count_shoulder_press(self, angles: Dict[str, Optional[float]]) -> int:
         """Count shoulder press reps using average shoulder angle."""
@@ -289,8 +331,8 @@ class ExerciseDetector:
         if avg_shoulder is None:
             return self.rep_count
 
-        t = self._THRESHOLDS[ExerciseType.SHOULDER_PRESS]
-        return self._count_with_threshold(avg_shoulder, ExerciseType.SHOULDER_PRESS, t['down'], t['up'])
+        down, up = self._thr("shoulder_press")
+        return self._count_with_threshold(avg_shoulder, ExerciseType.SHOULDER_PRESS, down, up)
 
     def _count_with_threshold(self,
                               angle: float,
@@ -305,6 +347,20 @@ class ExerciseDetector:
           DOWN -> (angle > up_threshold) -> UP (increment count)
         """
         self._update_exercise(exercise)
+
+        # 3点中值平滑: 单帧噪声尖刺(站立时膝角偶尔被误估到很小)会被中值滤掉, 不再误触发;
+        # 真实动作连续多帧, 中值照常跟随。代价: 状态切换延迟约1帧(可接受)。
+        self._angle_hist.append(angle)
+        if len(self._angle_hist) > 3:
+            self._angle_hist.pop(0)
+        _s = sorted(self._angle_hist)
+        angle = _s[len(_s) // 2]
+
+        # 正常方向动作(角度在底部变小: 深蹲/俯卧撑/弓步)改用"按谷计数":
+        # 每个下蹲谷底回升 ~25° 即算一次, 不要求完全站直 → 根治"多次并一次", 且不放大误触发。
+        # 反向动作(二头弯举/肩推, down>up)保留原阈值状态机。
+        if down_threshold < up_threshold:
+            return self._count_valley(angle, down_threshold)
 
         if self.stage == RepStage.UP:
             if angle < down_threshold:
@@ -329,6 +385,41 @@ class ExerciseDetector:
 
         return self.rep_count
 
+    def _count_valley(self, a: float, depth_gate: float, rise: float = 18.0) -> int:
+        """按谷计数: 跟踪角度的谷/峰交替, 每个"到过深度门槛的谷 + 回升≥rise"算一次。
+
+        depth_gate: 谷必须到达 <= 此值才算真的下蹲(过滤站立小晃动)。
+        rise: 回升/下降确认幅度(去抖), 小于此的抖动不切相位、不计数。
+        不依赖"完全站直", 故连续做、起身不充分也能一个个分开; 站立小幅噪声不计。
+        """
+        if self._v_extreme is None:
+            self._v_extreme = a
+            self._v_phase = "asc"
+            self._v_deep = False
+            return self.rep_count
+
+        if self._v_phase == "asc":               # 找峰(站起/上升段)
+            if a > self._v_extreme:
+                self._v_extreme = a
+            elif a < self._v_extreme - rise:      # 从峰下降足够 → 进入下蹲段
+                self._v_phase = "desc"
+                self._v_extreme = a
+                self._v_deep = (a <= depth_gate)
+        else:                                     # desc: 找谷(下蹲段)
+            if a < self._v_extreme:
+                self._v_extreme = a
+                if a <= depth_gate:
+                    self._v_deep = True
+            elif a > self._v_extreme + rise:      # 从谷回升足够 → 完成一次
+                if self._v_deep:
+                    self.rep_count += 1
+                    if len(self._history) < self._max_history:
+                        self._history.append((self.current_exercise, time.time(), self.rep_count))
+                self._v_phase = "asc"
+                self._v_extreme = a
+                self._v_deep = False
+        return self.rep_count
+
     def add_detection(self, timestamp: float):
         """Record a detection event for tracking."""
         if len(self._history) < self._max_history:
@@ -345,4 +436,6 @@ class ExerciseDetector:
         self.stage = RepStage.UP
         self._consecutive_frames_down = 0
         self._consecutive_frames_up = 0
+        self._angle_hist = []
+        self._v_phase = "asc"; self._v_extreme = None; self._v_deep = False
         self._history.clear()

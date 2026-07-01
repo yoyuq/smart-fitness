@@ -591,7 +591,8 @@ data class AgentToolApproval(
     val reason: String = "",
     val status: String = "pending",
     val summary: String = "",
-    @SerializedName("created_at") val createdAt: Long? = null
+    @SerializedName("created_at") val createdAt: Long? = null,
+    @SerializedName("run_id") val runId: String? = null
 )
 
 data class AgentApprovalListResponse(
@@ -619,7 +620,47 @@ data class AgentChatResponse(
     @SerializedName("pending_approvals") val pendingApprovals: List<AgentToolApproval> = emptyList(),
     @SerializedName("run_id") val runId: String? = null,
     @SerializedName("run_status") val runStatus: String? = null,
+    @SerializedName("agent_loop") val agentLoop: AgentLoopInfo? = null,
     val error: String? = null
+)
+
+data class AgentLoopInfo(
+    val enabled: Boolean = false,
+    val turns: Int? = null,
+    @SerializedName("forced_tool") val forcedTool: Boolean? = null,
+    val fallback: Boolean? = null,
+    val todos: List<AgentTodo> = emptyList()
+)
+
+data class AgentTodo(
+    val content: String = "",
+    val status: String = "pending"
+)
+
+data class AgentRunListResponse(
+    val ok: Boolean = false,
+    val runs: List<AgentRun> = emptyList(),
+    val error: String? = null
+)
+
+data class AgentRunDetailResponse(
+    val ok: Boolean = false,
+    val run: AgentRun? = null,
+    val error: String? = null
+)
+
+data class AgentRun(
+    @SerializedName("run_id") val runId: String = "",
+    val status: String = "",
+    val mode: String? = null,
+    @SerializedName("user_message") val userMessage: String? = null,
+    @SerializedName("final_text") val finalText: String? = null,
+    val domains: List<String> = emptyList(),
+    val todos: List<AgentTodo> = emptyList(),
+    @SerializedName("pending_approval_ids") val pendingApprovalIds: List<String> = emptyList(),
+    @SerializedName("created_at") val createdAt: Long? = null,
+    @SerializedName("updated_at") val updatedAt: Long? = null,
+    @SerializedName("completed_at") val completedAt: Long? = null
 )
 
 // =============================================================

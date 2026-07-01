@@ -1,0 +1,50 @@
+{
+  "available": true,
+  "task": "standard_shallow_deep",
+  "n": 204,
+  "n_pass": 108,
+  "n_shallow": 51,
+  "n_deep": 45,
+  "n_fail": 96,
+  "accuracy": 0.585,
+  "baseline_majority": 0.529,
+  "balanced_acc": 0.556,
+  "recall_pass": 0.651,
+  "recall_shallow": 0.549,
+  "recall_deep": 0.467,
+  "precision_pass": 0.634,
+  "precision_shallow": 0.553,
+  "precision_deep": 0.496,
+  "confusion": [
+    [
+      211,
+      62,
+      51
+    ],
+    [
+      56,
+      84,
+      13
+    ],
+    [
+      66,
+      6,
+      63
+    ]
+  ],
+  "classes": [
+    "standard",
+    "shallow",
+    "deep"
+  ],
+  "class_names": {
+    "standard": "合格",
+    "shallow": "太浅",
+    "deep": "太深"
+  },
+  "cv": "RepeatedStratifiedKFold 5x3",
+  "label_source": "用户手工标注；仅 standard/shallow/deep；已排除 fast/other",
+  "model_path": "C:\\Users\\hjl\\Projects\\smart_fitness\\datasets\\models\\rep_quality_userlabel.pt",
+  "updated_at": "2026-06-30 16:56:35",
+  "note": "当前阶段只识别太浅/太深两个错误；其他错误类型暂不参与训练和评估。"
+}
