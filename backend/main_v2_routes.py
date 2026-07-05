@@ -134,12 +134,26 @@ def monitor_state(device_id: Optional[str] = None):
         conn.close()
         if r:
             lr = {k: r[k] for k in r.keys() if k != "angle_series"}
+            # 优先用 evidence-based scorer（可解释 + PMID 引用）; 失败时回退到 TCN(历史 baseline).
             try:
-                import rep_quality_tcn
-                lr["model_quality"] = rep_quality_tcn.score_rep_quality(
-                    json.loads(r["angle_series"] or "{}"), r["total"])
+                import rep_quality_evidence
+                import json as _json
+                ev = rep_quality_evidence.score_rep_quality_evidence(
+                    _json.loads(r["angle_series"] or "{}"),
+                    r["exercise"],
+                    r["duration_s"] if "duration_s" in r.keys() else None,
+                )
+                lr["evidence_score"] = ev["score"]
+                lr["evidence_deficits"] = ev["deficits"]
+                lr["evidence_used"] = ev["evidence_used"]
+                lr["model_quality"] = ev["score"]   # 兼容旧字段
             except Exception:
-                lr["model_quality"] = None
+                try:
+                    import rep_quality_tcn
+                    lr["model_quality"] = rep_quality_tcn.score_rep_quality(
+                        json.loads(r["angle_series"] or "{}"), r["total"])
+                except Exception:
+                    lr["model_quality"] = None
             st["last_rep"] = lr
     except Exception:
         pass
@@ -1181,9 +1195,10 @@ async def v2_ai_plan(req: Request):
     body = await req.json()
     goal = body.get("goal", "增肌")
     weeks = int(body.get("weeks", 4))
+    import_to_plans = bool(body.get("import_to_plans", True))
     conn = get_db()
     try:
-        res = ai_planner.generate_plan(conn, user["user_id"], goal, weeks)
+        res = ai_planner.generate_plan(conn, user["user_id"], goal, weeks, import_to_plans=import_to_plans)
     finally:
         conn.close()
     if isinstance(res, dict):

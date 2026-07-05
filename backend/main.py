@@ -28,6 +28,35 @@ import sqlite3
 import os
 import threading
 
+
+# ------ Load backend/.env before any provider registry consults os.environ ------
+def _load_dotenv():
+    """Minimal .env loader (no python-dotenv dependency).
+
+    Reads ``backend/.env`` if present, applies each KEY=VALUE line to
+    ``os.environ`` without overwriting values already set in the shell.
+    Silent on missing file / malformed lines.
+    """
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"[.env] failed to load: {exc}")
+
+
+_load_dotenv()
+
 try:
     from dotenv import load_dotenv
     _BACKEND_DIR = os.path.dirname(__file__)
@@ -183,10 +212,21 @@ async def startup():
         asyncio.create_task(_warmup())
     except Exception as e:
         print(f"[Backend] warmup schedule failed: {e}")
+    try:
+        from fitness_agent.background_scheduler import start_background_scheduler
+        if start_background_scheduler(DB_PATH):
+            print("[Backend] Fitness Agent background scheduler active")
+    except Exception as e:
+        print(f"[Backend] Fitness Agent background scheduler failed: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    try:
+        from fitness_agent.background_scheduler import stop_background_scheduler
+        await stop_background_scheduler()
+    except Exception as e:
+        print(f"[Backend] Fitness Agent background scheduler stop failed: {e}")
     mqtt_handler.disconnect()
 
 

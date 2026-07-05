@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "example": {
+      "enabled": false,
+      "command": "python",
+      "args": ["path/to/mcp_server.py"],
+      "cwd": "path/to/server/workdir",
+      "env": {},
+      "timeout": 12,
+      "read_only": false,
+      "read_only_tools": ["safe_search", "get_status"],
+      "allow_tools": [],
+      "deny_tools": []
+    }
+  }
+}

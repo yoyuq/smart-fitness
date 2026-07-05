@@ -23,7 +23,11 @@ fitness_agent/
 ├── history.py           # 对话持久化
 ├── hooks.py             # UserPromptSubmit / PreToolUse / PostToolUse / Stop
 ├── permissions.py       # deny / ask / allow，写工具生成待审批请求
-├── tools.py             # 白名单工具实现
+├── tools.py             # 工具兼容导出：TOOL_SPECS / execute_tool
+├── toolkit/             # 模块化内部工具 registry + 各类 handler
+├── mcp_client.py        # MCP 兼容层：外部 stdio MCP server tools/list + tools/call
+├── mcp_server.py        # stdio MCP server：把内部工具按 MCP tools 暴露出去
+├── mcp_servers.example.json # 外部 MCP server 配置示例
 ├── registry.py          # App 能力目录，从 knowledge/index.json 生成
 └── README.md
 ```
@@ -115,6 +119,78 @@ knowledge/
 - `delete_all_user_data`
 
 健身 Agent 不是通用代码 Agent，不能给模型 Bash、文件系统、任意 SQL 或任意 URL 抓取能力。需要外部知识时只能走 `search_fitness_web` 这个受控搜索工具。
+
+## MCP 兼容
+
+当前 Agent 已支持最小 MCP 兼容层：
+
+1. **接入别人做的 MCP stdio server**：配置后，外部工具会出现在 Agent 工具清单里，命名格式为：
+
+```text
+mcp__<server>__<tool>
+```
+
+2. **把内部 Smart Fitness 工具暴露为 MCP server**：可用 `python -m fitness_agent.mcp_server` 通过 stdio 提供标准 `tools/list` / `tools/call`。
+
+### 接入外部 MCP 工具
+
+复制示例配置：
+
+```text
+fitness_agent/mcp_servers.example.json -> fitness_agent/mcp_servers.json
+```
+
+示例：
+
+```json
+{
+  "servers": {
+    "example": {
+      "enabled": true,
+      "command": "python",
+      "args": ["path/to/mcp_server.py"],
+      "cwd": "path/to/server/workdir",
+      "env": {},
+      "timeout": 12,
+      "read_only": false,
+      "read_only_tools": ["safe_search", "get_status"],
+      "allow_tools": [],
+      "deny_tools": []
+    }
+  }
+}
+```
+
+也可以用环境变量指定配置：
+
+```env
+AI_AGENT_MCP_CONFIG=C:\\path\\to\\mcp_servers.json
+AI_AGENT_MCP_TIMEOUT=12
+AI_AGENT_MCP_LIST_CACHE_TTL=60
+```
+
+安全策略：
+
+- 外部 MCP 工具默认 **需要 App 审批**。
+- 配置 `read_only=true` 或 `read_only_tools` 的工具才会直接执行。
+- 可用 `allow_tools` / `deny_tools` 控制某个 server 暴露哪些工具。
+- Agent 不使用 shell 拼接命令启动 MCP server，只按 `command + args` 用 `shell=False` 启动。
+
+### 暴露内部工具为 MCP server
+
+```powershell
+$env:SMART_FITNESS_MCP_DB="C:\Users\hjl\Projects\smart_fitness\backend\fitness.db"
+$env:SMART_FITNESS_MCP_USER_ID="31"
+python -m fitness_agent.mcp_server
+```
+
+支持方法：
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+注意：这个 server 是本地用户作用域工具 server。给外部客户端使用时，应只在可信本机环境运行。
 
 ## 当前 API
 
@@ -210,10 +286,46 @@ AI_AGENT_WEB_SEARCH_TIMEOUT=8
 
 ## 下一阶段
 
-1. Error Recovery：JSON 解析失败、工具失败、超时、max turns reached 分策略恢复。
-2. Tool Registry：把工具 schema/权限级别/分类从 `tools.py` 拆出去。
-3. App UI：展示 run 状态、todo、工具调用进度、联网搜索来源。
-4. Background/Cron：周报、周计划建议、连续未训练提醒，默认只提醒不自动修改数据。
+1. Error Recovery：JSON 解析失败、工具失败、超时、max turns reached 分策略恢复。✅
+2. Tool Registry：把工具 schema/权限级别/分类从 `tools.py` 拆出去。✅
+3. MCP 兼容：外部 MCP stdio server 接入 + 内部工具 MCP server 暴露。✅
+4. App UI：展示 run 状态、todo、工具调用进度、联网搜索来源。✅
+5. Background/Cron：周报、周计划建议、连续未训练提醒，默认只提醒不自动修改数据。✅
+
+## Background / Cron
+
+当前实现是保守版“主动教练 inbox”：
+
+- `fitness_agent.background.run_background_checks(conn, user_id, job)` 是 durable 业务入口。
+- `fitness_agent.background_scheduler` 在 FastAPI 启动后每隔一段时间 best-effort 扫描用户并运行后台检查。
+- 后台任务只写入 `agent_background_items`，不会直接修改身体数据、长期记忆或正式训练计划。
+- 下周计划只是草案 payload；用户要导入正式计划时，仍应走现有 Agent 写工具审批。
+
+支持 job：
+
+- `daily_checkin`：每天生成一次训练提醒；今天没练则提醒恢复连续性，已练则给恢复建议。
+- `weekly_review`：每周生成一次 7 天训练周报 + 下周训练计划草案。
+- `all`：同时运行以上两个。
+
+API：
+
+- `GET /api/v2/agent/background/items?status=pending&limit=20`
+- `POST /api/v2/agent/background/run`，body: `{ "job": "daily_checkin|weekly_review|all" }`
+- `POST /api/v2/agent/background/items/{item_id}/read`
+- `POST /api/v2/agent/background/items/{item_id}/dismiss`
+
+配置：
+
+```env
+AI_AGENT_BACKGROUND_ENABLED=true
+AI_AGENT_BACKGROUND_INTERVAL_SEC=1800
+```
+
+验证：
+
+```powershell
+python -m pytest test_fitness_agent_background.py -q
+```
 
 ## 验证命令
 

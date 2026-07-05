@@ -1,8 +1,25 @@
 """Persistent chat history for the Smart Fitness Agent."""
 import json
+import re
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional
+
+
+def _sanitize_agent_content(content: str) -> str:
+    """Remove stale/provider-specific wording from persisted assistant history.
+
+    Older builds allowed the model to claim a concrete external model/architecture.
+    History is shown directly in the App, so sanitize on write/read to avoid
+    keeping misleading product copy alive after the prompt/runtime fix.
+    """
+    text = content or ""
+    if "GPT-4" in text or "OpenAI" in text:
+        text = re.sub(r"基于\s*GPT-4\s*架构", "由后端配置的 LLM 调用链驱动", text, flags=re.I)
+        text = re.sub(r"不是\s*GPT-4[、,，\s]*OpenAI\s*或任何特定模型架构[。.]?", "", text, flags=re.I)
+        text = text.replace("GPT-4", "后端配置的 LLM 调用链")
+        text = text.replace("OpenAI", "后端配置的模型服务")
+    return text.strip()
 
 
 TABLE_SQL = """
@@ -37,6 +54,7 @@ def add_agent_chat_message(
     ensure_agent_chat_schema(conn)
     role = role if role in {"user", "assistant"} else "user"
     content = (content or "").strip()
+    content = _sanitize_agent_content(content) if role == "assistant" else content
     if not content:
         return 0
     domains_json = json.dumps(domains or [], ensure_ascii=False)
@@ -74,7 +92,7 @@ def get_agent_chat_history(conn: sqlite3.Connection, user_id: int, limit: int = 
         out.append({
             "id": r["id"],
             "role": r["role"],
-            "content": r["content"],
+            "content": _sanitize_agent_content(r["content"]) if r["role"] == "assistant" else r["content"],
             "mode": r["mode"] or "auto",
             "domains": domains if isinstance(domains, list) else [],
             "created_at": r["created_at"],
@@ -91,7 +109,7 @@ def delete_agent_chat_history(conn: sqlite3.Connection, user_id: int) -> int:
 
 def to_llm_history(messages: List[Dict[str, Any]], limit: int = 20) -> List[Dict[str, str]]:
     return [
-        {"role": m.get("role", "user"), "content": m.get("content", "")}
+        {"role": m.get("role", "user"), "content": _sanitize_agent_content(m.get("content", "")) if m.get("role") == "assistant" else m.get("content", "")}
         for m in messages[-limit:]
         if m.get("role") in {"user", "assistant"} and m.get("content")
     ]

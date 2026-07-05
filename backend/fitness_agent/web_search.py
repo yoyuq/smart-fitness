@@ -29,6 +29,24 @@ TRUSTED_HINTS = [
     "acsm.org", "sportsmedicine.org", "eatright.org",
 ]
 
+# Academic-mode domain whitelist. When callers pass academic=True we bias the
+# query with a ``site:`` filter and post-filter results to these hosts.
+ACADEMIC_HINTS = [
+    "pubmed.ncbi.nlm.nih.gov",
+    "ncbi.nlm.nih.gov",
+    "scholar.google.com",
+    "doi.org",
+    "link.springer.com",
+    "onlinelibrary.wiley.com",
+    "tandfonline.com",
+    "sciencedirect.com",
+    "journals.lww.com",  # JSCR / MSSE
+    "europepmc.org",
+    "nsca.com",
+    "acsm.org",
+    "researchgate.net",
+]
+
 FALLBACK_FITNESS_HINTS = {
     "健身", "训练", "运动", "跑步", "长跑", "力量", "增肌", "减脂", "减重", "体脂",
     "营养", "饮食", "蛋白", "碳水", "脂肪", "热量", "卡路里", "恢复", "睡眠", "拉伸",
@@ -192,10 +210,14 @@ def _parse_duckduckgo_html(text: str, limit: int) -> List[Dict[str, Any]]:
     return results
 
 
-def search_fitness_web(query: str, limit: int = 5) -> Dict[str, Any]:
+def search_fitness_web(query: str, limit: int = 5, academic: bool = False) -> Dict[str, Any]:
     """Search the web for fitness/health/nutrition information.
 
     Returns snippets only. No arbitrary URL fetch is exposed to the model.
+
+    ``academic=True`` biases the query with ``site:`` filters toward PubMed /
+    ACSM / NSCA / DOI publishers and post-filters results to those hosts. It
+    also raises the request timeout since these mirrors are slower.
     """
     if not _enabled():
         return {"ok": False, "error": "web search disabled by AI_AGENT_WEB_SEARCH_ENABLED"}
@@ -208,22 +230,52 @@ def search_fitness_web(query: str, limit: int = 5) -> Dict[str, Any]:
         return {"ok": False, "error": "query rejected by LLM web-search guard", "query": query, "decision": decision}
 
     search_query = _sanitize_query(decision.get("search_query") or query)
-    limit = max(1, min(int(limit or 5), int(os.environ.get("AI_AGENT_WEB_SEARCH_MAX_RESULTS", "5"))))
-    timeout = float(os.environ.get("AI_AGENT_WEB_SEARCH_TIMEOUT", "8"))
+    max_results_env = int(os.environ.get("AI_AGENT_WEB_SEARCH_MAX_RESULTS", "5"))
+    if academic:
+        max_results_env = int(os.environ.get("AI_AGENT_WEB_SEARCH_MAX_RESULTS_ACADEMIC", str(max(max_results_env, 6))))
+    limit = max(1, min(int(limit or 5), max_results_env))
+
+    timeout_key = "AI_AGENT_WEB_SEARCH_ACADEMIC_TIMEOUT" if academic else "AI_AGENT_WEB_SEARCH_TIMEOUT"
+    timeout = float(os.environ.get(timeout_key, "20" if academic else "8"))
+
+    if academic and not any(m in search_query.lower() for m in ["site:", "pubmed", "doi"]):
+        # Bias toward peer-reviewed hosts without silencing the domain choice.
+        academic_sites = os.environ.get(
+            "AI_AGENT_WEB_SEARCH_ACADEMIC_SITES",
+            "pubmed.ncbi.nlm.nih.gov OR site:acsm.org OR site:nsca.com OR site:doi.org",
+        )
+        search_query = f"{search_query} site:{academic_sites}"
+
     url = "https://html.duckduckgo.com/html/?q=" + quote_plus(search_query)
     headers = {"User-Agent": "Mozilla/5.0 SmartFitnessAgent/1.0"}
     try:
         resp = requests.get(url, headers=headers, timeout=timeout)
         resp.raise_for_status()
-        results = _parse_duckduckgo_html(resp.text, limit=limit)
+        results = _parse_duckduckgo_html(resp.text, limit=limit * (3 if academic else 1))
     except Exception as exc:
         return {"ok": False, "error": f"web search failed: {type(exc).__name__}: {exc}", "query": query, "decision": decision, "results": []}
+
+    if academic:
+        filtered = [r for r in results if any(h in r.get("domain", "") for h in ACADEMIC_HINTS)]
+        # Fall back to trusted hints so we always show *something* peer-adjacent.
+        if not filtered:
+            filtered = [r for r in results if r.get("trusted_hint")]
+        results = filtered[:limit]
+    else:
+        results = results[:limit]
+
     return {
         "ok": True,
         "query": query,
         "search_query": search_query,
         "decision": decision,
+        "academic": bool(academic),
         "source": "duckduckgo_html",
         "results": results,
-        "note": "Search snippets may be incomplete; prefer authoritative sources and cite URLs in the final answer.",
+        "note": (
+            "Academic search results may be slower and less comprehensive than direct PubMed access; "
+            "treat snippets as pointers, not full evidence. Cite URLs in the final answer."
+            if academic
+            else "Search snippets may be incomplete; prefer authoritative sources and cite URLs in the final answer."
+        ),
     }

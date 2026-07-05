@@ -14,6 +14,13 @@ from .core import (
     nutrition_plan,
     respond as respond_once,
 )
+from .background import (
+    dismiss_background_item,
+    ensure_background_schema,
+    list_background_items,
+    mark_background_item_read,
+    run_background_checks,
+)
 from .compact import (
     compact_trace,
     ensure_context_schema,
@@ -50,7 +57,7 @@ from .permissions import (
 )
 from .registry import AGENT_DOMAINS, get_domain_catalog
 from .runtime import get_run, list_runs, resume_run_after_approval, resume_run_after_denial, start_run
-from .state import ensure_agent_state_schema
+from .state import ensure_agent_state_schema, list_provider_health, recent_agent_stats
 from .tools import TOOL_SPECS, execute_tool
 from .web_search import search_fitness_web
 
@@ -71,8 +78,10 @@ __all__ = [
     "create_approval",
     "delete_agent_chat_history",
     "detect_domains",
+    "dismiss_background_item",
     "ensure_agent_chat_schema",
     "ensure_agent_state_schema",
+    "ensure_background_schema",
     "ensure_context_schema",
     "ensure_memory_schema",
     "ensure_permission_schema",
@@ -82,23 +91,28 @@ __all__ = [
     "get_context_summary",
     "get_domain_catalog",
     "get_run",
+    "list_background_items",
     "list_layered_memories",
     "list_memories_by_kind",
     "list_pending_approvals",
+    "list_provider_health",
     "list_runs",
     "load_catalog",
     "mark_approval",
+    "mark_background_item_read",
     "normalize_memory_kind",
     "nutrition_plan",
     "prepare_llm_history_with_summary",
     "public_catalog",
     "register_default_hooks",
+    "recent_agent_stats",
     "register_hook",
     "respond",
     "respond_once",
     "respond_with_loop",
     "resume_run_after_approval",
     "resume_run_after_denial",
+    "run_background_checks",
     "search_fitness_web",
     "search_knowledge",
     "start_run",

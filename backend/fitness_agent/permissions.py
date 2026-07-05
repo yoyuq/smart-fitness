@@ -12,7 +12,7 @@ import json
 import sqlite3
 import time
 import uuid
-from typing import Any, Dict, Optional
+from .mcp_client import mcp_permission_decision
 
 WRITE_TOOLS = {
     "save_coach_memory",
@@ -73,6 +73,9 @@ def ensure_permission_schema(conn: sqlite3.Connection) -> None:
 def check_permission(tool_name: str, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Return allow/ask/deny decision for a tool call."""
     args = args or {}
+    mcp_decision = mcp_permission_decision(tool_name, args)
+    if mcp_decision:
+        return mcp_decision
     if tool_name in DENY_TOOLS:
         return {"behavior": "deny", "reason": f"工具被硬拒绝: {tool_name}"}
     if tool_name in WRITE_TOOLS:
@@ -105,6 +108,8 @@ def create_approval(conn: sqlite3.Connection, user_id: int, tool_name: str, args
 
 
 def summarize_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
+    if str(tool_name or "").startswith("mcp__"):
+        return f"调用外部 MCP 工具：{tool_name}"
     if tool_name == "save_coach_memory":
         kind = args.get("kind") or args.get("category") or "general"
         return f"保存教练记忆[{kind}]：{args.get('note', '')}"
