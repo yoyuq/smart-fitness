@@ -52,6 +52,9 @@ HUNYUAN_MODEL = os.environ.get("HUNYUAN_MODEL", "hunyuan-lite")
 PROVIDER_PRIORITY = os.environ.get("AI_PROVIDER_PRIORITY", "volc,deepseek").split(",")
 
 TIMEOUT = int(os.environ.get("AI_TIMEOUT", "180"))
+AGENT_LLM_TIMEOUT = int(os.environ.get("AI_AGENT_LLM_TIMEOUT", "12"))
+REMARK_TIMEOUT = int(os.environ.get("AI_REMARK_TIMEOUT", "2"))
+REMARK_MAX_PROVIDERS = int(os.environ.get("AI_REMARK_MAX_PROVIDERS", "1"))
 MAX_TOKENS_SUMMARY = 800
 # v4 系列是推理模型, reasoning tokens 计入 max_tokens; 2500 会被思考烧光导致正文为空
 MAX_TOKENS_PLAN = int(os.environ.get("AI_MAX_TOKENS_PLAN", "6000"))
@@ -77,7 +80,7 @@ def provider_status() -> Dict[str, Any]:
     }
 
 
-def _call_volc(messages, max_tokens, temperature, model=None) -> Optional[str]:
+def _call_volc(messages, max_tokens, temperature, model=None, timeout: Optional[int] = None) -> Optional[str]:
     if not (VOLC_API_KEY and requests):
         return None
     use_model = model or VOLC_MODEL
@@ -91,7 +94,7 @@ def _call_volc(messages, max_tokens, temperature, model=None) -> Optional[str]:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             },
-            timeout=TIMEOUT,
+            timeout=timeout or TIMEOUT,
         )
         if r.status_code != 200:
             log.warning(f"Volc HTTP {r.status_code}: {r.text[:300]}")
@@ -103,7 +106,7 @@ def _call_volc(messages, max_tokens, temperature, model=None) -> Optional[str]:
         return None
 
 
-def _call_volc_coding(messages, max_tokens, temperature, model=None) -> Optional[str]:
+def _call_volc_coding(messages, max_tokens, temperature, model=None, timeout: Optional[int] = None) -> Optional[str]:
     """火山方舟 Coding Plan 套餐: Anthropic 兼容端点 /api/coding/v1/messages.
 
     标准 chat completions 接口不计入 coding 套餐额度 (会报 AccountOverdue),
@@ -130,7 +133,7 @@ def _call_volc_coding(messages, max_tokens, temperature, model=None) -> Optional
             headers={"x-api-key": VOLC_API_KEY, "anthropic-version": "2023-06-01",
                      "Content-Type": "application/json"},
             json=body,
-            timeout=TIMEOUT,
+            timeout=timeout or TIMEOUT,
         )
         if r.status_code != 200:
             log.warning(f"VolcCoding HTTP {r.status_code}: {r.text[:300]}")
@@ -143,7 +146,7 @@ def _call_volc_coding(messages, max_tokens, temperature, model=None) -> Optional
         return None
 
 
-def _call_deepseek(messages, max_tokens, temperature) -> Optional[str]:
+def _call_deepseek(messages, max_tokens, temperature, timeout: Optional[int] = None) -> Optional[str]:
     if not (DEEPSEEK_API_KEY and requests):
         return None
     try:
@@ -156,7 +159,7 @@ def _call_deepseek(messages, max_tokens, temperature) -> Optional[str]:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             },
-            timeout=TIMEOUT,
+            timeout=timeout or TIMEOUT,
         )
         if r.status_code != 200:
             log.warning(f"DeepSeek HTTP {r.status_code}: {r.text[:300]}")
@@ -168,7 +171,7 @@ def _call_deepseek(messages, max_tokens, temperature) -> Optional[str]:
         return None
 
 
-def _call_openai_compat(url, key, model, messages, max_tokens, temperature) -> Optional[str]:
+def _call_openai_compat(url, key, model, messages, max_tokens, temperature, timeout: Optional[int] = None) -> Optional[str]:
     """通用 OpenAI 兼容协议调用 (qwen/hunyuan 等)."""
     if not (key and requests):
         return None
@@ -178,7 +181,7 @@ def _call_openai_compat(url, key, model, messages, max_tokens, temperature) -> O
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json={"model": model, "messages": messages,
                   "temperature": temperature, "max_tokens": max_tokens},
-            timeout=TIMEOUT,
+            timeout=timeout or TIMEOUT,
         )
         if r.status_code != 200:
             log.warning(f"{model} HTTP {r.status_code}: {r.text[:200]}")
@@ -190,16 +193,16 @@ def _call_openai_compat(url, key, model, messages, max_tokens, temperature) -> O
 
 
 _DISPATCH = {
-    "volc": lambda m, mt, t: _call_volc(m, mt, t),
-    "volc-coding": lambda m, mt, t: _call_volc_coding(m, mt, t),
-    "deepseek": lambda m, mt, t: _call_deepseek(m, mt, t),
-    "qwen": lambda m, mt, t: _call_openai_compat(QWEN_URL, QWEN_API_KEY, QWEN_MODEL, m, mt, t),
-    "hunyuan": lambda m, mt, t: _call_openai_compat(HUNYUAN_URL, HUNYUAN_API_KEY, HUNYUAN_MODEL, m, mt, t),
+    "volc": lambda m, mt, t, timeout=None: _call_volc(m, mt, t, timeout=timeout),
+    "volc-coding": lambda m, mt, t, timeout=None: _call_volc_coding(m, mt, t, timeout=timeout),
+    "deepseek": lambda m, mt, t, timeout=None: _call_deepseek(m, mt, t, timeout=timeout),
+    "qwen": lambda m, mt, t, timeout=None: _call_openai_compat(QWEN_URL, QWEN_API_KEY, QWEN_MODEL, m, mt, t, timeout=timeout),
+    "hunyuan": lambda m, mt, t, timeout=None: _call_openai_compat(HUNYUAN_URL, HUNYUAN_API_KEY, HUNYUAN_MODEL, m, mt, t, timeout=timeout),
 }
 
 
 def _call_llm(messages: List[Dict], max_tokens: int = 600, temperature: float = 0.6,
-              prefer: Optional[str] = None, chain: Optional[str] = None) -> Optional[str]:
+              prefer: Optional[str] = None, chain: Optional[str] = None, timeout: Optional[int] = None) -> Optional[str]:
     """按优先级调用 provider, 失败 fallback.
 
     chain: 逗号分隔的精确调用链 (如 "deepseek,qwen"), 给定时只按它走;
@@ -220,7 +223,7 @@ def _call_llm(messages: List[Dict], max_tokens: int = 600, temperature: float = 
         fn = _DISPATCH.get((prov or "").strip())
         if fn is None:
             continue
-        out = fn(messages, max_tokens, temperature)
+        out = fn(messages, max_tokens, temperature, timeout=timeout)
         if out:
             return out
     return None
@@ -466,8 +469,13 @@ def weekly_report(conn, user_id):
     return {"ok": text is not None, "report": text or "AI 服务暂不可用", "context": ctx}
 
 
-def generate_plan(conn, user_id, goal, weeks=4):
-    """根据目标生成训练计划, 返回结构化 plan list"""
+def generate_plan(conn, user_id, goal, weeks=4, import_to_plans=True):
+    """根据目标生成训练计划。
+
+    import_to_plans=True keeps the legacy behavior and writes to workout_plans.
+    import_to_plans=False returns a draft only, for App/Agent preview + user edit
+    before importing.
+    """
     ctx = _load_user_context(conn, user_id)
     ctx_block = _build_user_context_block(ctx)
     prompt = f"""{ctx_block}
@@ -475,25 +483,45 @@ def generate_plan(conn, user_id, goal, weeks=4):
 用户目标: {goal}
 周期: {weeks} 周
 
-请生成一份渐进式训练计划. 输出**纯 JSON 数组**(不要 markdown, 不要解释), 每项 schema:
+请生成一份开放式、真正有帮助的渐进训练计划。计划不限于当前 App 可识别动作，可以包含跑步、游泳、力量训练、拉伸、恢复、休息日等。
+
+输出必须是合法 JSON。优先输出对象：
 {{
-  "week": 1,
-  "day": 1,
-  "exercise_type": "squat",
-  "target_reps": 15,
-  "target_sets": 3,
-  "intensity_note": "热身组, 不到力竭"
+  "reason": "为什么这样安排，结合用户身体数据、训练记录、目标和恢复需求，2-4句",
+  "exercises": [
+    {{
+      "week": 1,
+      "day": 1,
+      "title": "有氧耐力 + 上肢力量",
+      "type": "running",
+      "category": "cardio",
+      "duration_min": 35,
+      "distance_km": 5,
+      "sets": 0,
+      "reps": 0,
+      "intensity": "中等",
+      "note": "配速控制在能说完整句子的强度，跑后做肩背拉伸"
+    }}
+  ]
 }}
 
+字段说明:
+- week/day: 第几周/第几天，用于日期维度展示。
+- title: 用户可读项目名。
+- type: 机器可读类型，如 running/swimming/pull_up/squat/stretch/mobility/rest。
+- category: cardio/strength/mobility/recovery/rest/skill/mixed。
+- duration_min/distance_km/sets/reps 可按项目实际填写，不适用填 0。
+- intensity: 低/中等/较高/恢复。
+- note: 具体执行要点、技术提醒或恢复建议。
+
 约束(必须全部满足):
-- 如果用户目标中指明了每周训练天数, 每周的不同 day 数量必须严格等于该天数; 否则一周 5-6 个训练日
-- 渐进 (后周 reps/sets 增加)
-- 涵盖动作: squat, push_up, lunge, plank, bicep_curl, shoulder_press, jumping_jack
-- 总长度不超过 {weeks * 6} 条
-- intensity_note 必须针对该动作给出具体技术要点(发力位置/常见错误/器械用法), 禁止"中等强度""保留X次"这类通用模板, 禁止任意两条重复; 如果用户提到器械限制, 备注要体现该器械的具体用法
-- 必须是合法 JSON, 第一个字符是 ["""
+- 如果用户目标中指明了每周训练天数, 每周的不同 day 数量必须尽量匹配；否则一周 4-6 个训练/恢复安排。
+- 不要局限于 squat/push_up 等可识别动作；根据用户目标加入跑步、游泳、拉伸、恢复等真正有帮助的项目。
+- 结合用户身体数据、近期训练记录和已有计划，避免过度训练。
+- 总长度不超过 {weeks * 7} 条。
+- 必须是合法 JSON, 第一个字符是 {{ 或 ["""
     raw = _call_llm(
-        [{"role": "system", "content": SYSTEM_PROMPT_BASE + " 严格按要求只输出 JSON 数组, 不要任何额外文字."},
+        [{"role": "system", "content": SYSTEM_PROMPT_BASE + " 严格按要求只输出 JSON 对象或数组, 不要任何额外文字."},
          {"role": "user", "content": prompt}],
         max_tokens=MAX_TOKENS_PLAN, temperature=0.4,
         # 2026-06 评测: deepseek-v4-flash 主力, qwen3.7-max 质量兜底 (勿用 hunyuan, JSON 纪律差)
@@ -512,30 +540,39 @@ def generate_plan(conn, user_id, goal, weeks=4):
                 raw = raw[4:]
             raw = raw.strip()
     try:
-        plans = json.loads(raw)
+        raw_json = json.loads(raw)
+        reason = ""
+        if isinstance(raw_json, dict):
+            reason = str(raw_json.get("reason") or raw_json.get("rationale") or raw_json.get("why") or "").strip()
+            plans = raw_json.get("exercises") or raw_json.get("plans") or raw_json.get("items") or []
+        else:
+            plans = raw_json
         if not isinstance(plans, list):
             raise ValueError("not a list")
     except Exception as e:
         log.warning(f"plan JSON parse failed: {e}, raw[:200]={raw[:200]}")
         return {"ok": False, "error": f"AI 返回的格式有误: {e}", "raw": raw[:500], "plans": []}
 
-    # 写入 workout_plans 表 (plan_id 必填: 缺失会导致前端无法删除该计划)
-    cur = conn.cursor()
-    today_ts = int(time.time())
+    inserted = 0
     plan_name = f"AI 计划-{goal[:20]} {weeks}周"
-    plan_id = "plan_" + uuid.uuid4().hex[:12]
-    try:
-        cur.execute(
-            "INSERT INTO workout_plans (plan_id, user_id, name, exercises, created_at) VALUES (?, ?, ?, ?, ?)",
-            (plan_id, user_id, plan_name, json.dumps(plans, ensure_ascii=False), today_ts)
-        )
-        conn.commit()
-        inserted = cur.rowcount
-    except Exception as e:
-        log.warning(f"insert plan failed: {e}")
-        inserted = 0
+    plan_id = None
+    if import_to_plans:
+        cur = conn.cursor()
+        today_ts = int(time.time())
+        plan_id = "plan_" + uuid.uuid4().hex[:12]
+        try:
+            cur.execute(
+                "INSERT INTO workout_plans (plan_id, user_id, name, exercises, created_at) VALUES (?, ?, ?, ?, ?)",
+                (plan_id, user_id, plan_name, json.dumps(plans, ensure_ascii=False), today_ts)
+            )
+            conn.commit()
+            inserted = cur.rowcount
+        except Exception as e:
+            log.warning(f"insert plan failed: {e}")
+            inserted = 0
     return {"ok": True, "plans": plans, "inserted": inserted, "goal": goal,
-            "plan_name": plan_name, "plan_id": plan_id}
+            "plan_name": plan_name, "plan_id": plan_id, "draft": not import_to_plans,
+            "reason": reason}
 
 
 def chat(conn, user_id, message, history=None):
@@ -597,8 +634,13 @@ def workout_coach_remark(exercise: str, reps: int, duration_s: float, avg_form_s
     ]
     try:
         # max_tokens 给足: 推理模型的思考 token 计入上限, 120 会饿死正文
+        remark_chain = os.environ.get("AI_REMARK_CHAIN", "deepseek,qwen,volc-coding,hunyuan")
+        providers = [p.strip() for p in str(remark_chain).split(",") if p.strip()]
+        max_providers = max(1, min(REMARK_MAX_PROVIDERS, len(providers) or 1))
+        fast_chain = ",".join(providers[:max_providers]) if providers else "deepseek"
         text = _call_llm(messages, temperature=0.7, max_tokens=800,
-                         chain=os.environ.get("AI_REMARK_CHAIN", "volc-coding,hunyuan,deepseek"))
+                         chain=fast_chain,
+                         timeout=REMARK_TIMEOUT)
         if text: return text.strip()
     except Exception as e:
         log.warning(f"workout_coach_remark LLM fail: {e}")
