@@ -12,7 +12,7 @@ import main_v2_extra  # noqa: F401 - mounts routes
 
 
 def test_training_data_endpoint_for_existing_user_has_summary_shape():
-    token = auth.generate_token(31, "hjl")
+    token = auth.generate_token(31, "testuser")
     client = TestClient(app)
     r = client.get("/api/v2/training/data?period=year", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
@@ -27,7 +27,7 @@ def test_training_data_endpoint_for_existing_user_has_summary_shape():
 
 
 def test_training_rep_images_endpoint_shape():
-    token = auth.generate_token(31, "hjl")
+    token = auth.generate_token(31, "testuser")
     client = TestClient(app)
     listing = client.get("/api/v2/training/data?period=year", headers={"Authorization": f"Bearer {token}"}).json()
     reps = [rep for sess in listing.get("sessions", []) for rep in sess.get("reps", [])]

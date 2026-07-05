@@ -1,4 +1,4 @@
-import os, sys, uuid
+﻿import os, sys, uuid
 from fastapi.testclient import TestClient
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -15,7 +15,7 @@ def _uid() -> int:
 
 
 def test_fitness_agent_kb_lists_domains():
-    token = auth.generate_token(_uid(), "hjl")
+    token = auth.generate_token(_uid(), "testuser")
     client = TestClient(app)
     r = client.get("/api/v2/agent/kb", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
@@ -51,7 +51,7 @@ def test_fitness_agent_restricted_web_search_tool(monkeypatch):
 
 
 def test_fitness_agent_requires_message():
-    token = auth.generate_token(_uid(), "hjl")
+    token = auth.generate_token(_uid(), "testuser")
 
     client = TestClient(app)
     r = client.post("/api/v2/agent/chat", headers={"Authorization": f"Bearer {token}"}, json={"message": ""})
@@ -259,3 +259,4 @@ def test_fitness_agent_layered_memory_tool_requires_approval_and_groups(monkeypa
         assert summaries  # completed run gets a lightweight run summary
     finally:
         conn.close()
+
