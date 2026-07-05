@@ -2,6 +2,34 @@
 
 **智能健身指导系统** — AI-powered real-time exercise coaching system with computer vision and IoT sensors.
 
+## Screenshots
+
+| Home dashboard | AI-coach reminder inbox | Reminder detail |
+|---|---|---|
+| ![Home](assets/screenshots/app_home_dashboard.png) | ![Agent inbox](assets/screenshots/agent_background_inbox.png) | ![Agent reminder](assets/screenshots/agent_background_reminder.png) |
+
+### AI-coach report (Stage-2 LLM upgrade)
+
+Same training session, three generations of Stage-2 reasoning model — you can literally see the report get sharper:
+
+| v1 · `qwen-plus` (2024, 1400 tok) | v2 · `doubao-seed-1-6-pro` (1400 tok) | v3 · `qwen3.7-max` (2026, 6000 tok) |
+|---|---|---|
+| ![v1](assets/screenshots/ai_coach_report_v1_qwen-plus.png) | ![v2](assets/screenshots/ai_coach_report_v2_doubao.png) | ![v3](assets/screenshots/ai_coach_report_v3_qwen3-7-max.png) |
+| Generic tips | Coach-style advice | Per-rep numeric diagnostics (`depth 82.8°`, `trunk lean 30°`), concrete regression drills (box squat / goblet squat), and user-preference-aware cautions |
+
+The live Stage-2 provider chain (see `backend/fitness_agent/vision_pipeline.py`):
+
+```
+bailian-qwen3-7-max            ← primary (2026 flagship, 6k reasoning budget)
+bailian-kimi-k2-7-code         ← long-context backup
+bailian-deepseek-v4-pro        ← deep-reasoning backup
+bailian-qwen3-6-flash          ← fast lane
+bailian-deepseek-v4-flash      ← fast lane
+qwen (qwen-plus, legacy key)   ← compat
+volc-coding (doubao Seed 1.6)  ← fallback
+volc / volc-legacy             ← last resort
+```
+
 ## Architecture Overview
 
 ```
