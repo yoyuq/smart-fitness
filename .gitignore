@@ -9,6 +9,23 @@ venv/
 *.apk
 edge_esp32cam/build/
 
+# Secrets â€” never commit
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+
+# API-key hotspots (kept local, never pushed)
+backend/_llm_*.py
+backend/_kimi_*.py
+backend/_vl_*.py
+backend/_perf*.py
+backend/_probe_*.py
+backend/_bench*.py
+**/*api_key*.txt
+**/secrets.*
+
 # Binary / large files
 *.pkl
 *.db
@@ -127,7 +144,7 @@ ml_pose/poc_out/
 # YOLO weights (auto-downloaded)
 yolo26*.pt
 
-# rep ¹Ø¼üÖ¡ (ÑµÁ·²úÉú)
+# rep ï¿½Ø¼ï¿½Ö¡ (Ñµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 backend/data/rep_frames/
 
 backend/data/rep_clips/
