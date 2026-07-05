@@ -37,6 +37,15 @@ interface ApiService {
     @GET("api/v2/plans")
     suspend fun listPlans(): PlansResponse
 
+    @POST("api/v2/plans/ai_draft")
+    suspend fun draftPlanWithAi(@Body req: PlanAiDraftRequest): PlanAiDraftResponse
+
+    @POST("api/v2/plans/{plan_id}/checkin")
+    suspend fun checkinPlanItem(@Path("plan_id") planId: String, @Body req: PlanCheckinRequest): PlanCheckinResponse
+
+    @PUT("api/v2/plans/{plan_id}")
+    suspend fun updatePlan(@Path("plan_id") planId: String, @Body req: UpdatePlanRequest): UpdatePlanResponse
+
     @DELETE("api/v2/plans/{plan_id}")
     suspend fun deletePlan(@Path("plan_id") planId: String): DeletePlanResponse
 
@@ -79,7 +88,40 @@ interface ApiService {
     @GET("api/v2/training/rep/{rep_id}/images")
     suspend fun trainingRepImages(@Path("rep_id") repId: Long): TrainingRepImageResponse
 
-    // ---------- D-05 Device Binding ----------
+    @POST("api/v2/training/rep/{rep_id}/ai_coach")
+    suspend fun trainingRepAiCoach(
+        @Path("rep_id") repId: Long,
+        @Body body: AiCoachRequest
+    ): AiCoachResponse
+
+    @POST("api/v2/training/session/{session_id}/ai_coach")
+    suspend fun trainingSessionAiCoach(
+        @Path("session_id") sessionId: String,
+        @Body body: AiCoachRequest = AiCoachRequest()
+    ): SessionAiCoachResponse
+
+    // AI Coach reports archive
+    @GET("api/v2/ai_coach/reports")
+    suspend fun aiCoachReports(
+        @retrofit2.http.Query("session_id") sessionId: String? = null,
+        @retrofit2.http.Query("limit") limit: Int? = null
+    ): AiCoachReportListResponse
+
+    @GET("api/v2/ai_coach/reports/{report_id}")
+    suspend fun aiCoachReport(
+        @Path("report_id") reportId: String
+    ): AiCoachReportDetail
+
+    @retrofit2.http.PATCH("api/v2/ai_coach/reports/{report_id}")
+    suspend fun aiCoachReportUpdate(
+        @Path("report_id") reportId: String,
+        @Body body: AiCoachReportNoteUpdate
+    ): AiCoachReportUpdateResponse
+
+    @retrofit2.http.DELETE("api/v2/ai_coach/reports/{report_id}")
+    suspend fun aiCoachReportDelete(
+        @Path("report_id") reportId: String
+    ): AiCoachReportDeleteResponse
 
     @POST("api/v2/devices/bind")
     suspend fun bindDevice(@Body req: BindDeviceRequest): BindDeviceResponse
@@ -156,6 +198,27 @@ interface ApiService {
 
     @GET("api/v2/agent/runs/{run_id}")
     suspend fun fitnessAgentRunDetail(@Path("run_id") runId: String): com.smartfitness.app.model.AgentRunDetailResponse
+
+    @GET("api/v2/agent/kb")
+    suspend fun fitnessAgentKb(): com.smartfitness.app.model.AgentKnowledgeResponse
+
+    @GET("api/v2/agent/health")
+    suspend fun fitnessAgentHealth(@Query("window_sec") windowSec: Int = 3600): com.smartfitness.app.model.AgentHealthResponse
+
+    @GET("api/v2/agent/background/items")
+    suspend fun fitnessAgentBackgroundItems(
+        @Query("status") status: String = "pending",
+        @Query("limit") limit: Int = 20
+    ): com.smartfitness.app.model.AgentBackgroundItemListResponse
+
+    @POST("api/v2/agent/background/run")
+    suspend fun runFitnessAgentBackground(@Body req: com.smartfitness.app.model.AgentBackgroundRunRequest): com.smartfitness.app.model.AgentBackgroundRunResponse
+
+    @POST("api/v2/agent/background/items/{item_id}/read")
+    suspend fun markFitnessAgentBackgroundRead(@Path("item_id") itemId: String): GenericOkResponse
+
+    @POST("api/v2/agent/background/items/{item_id}/dismiss")
+    suspend fun dismissFitnessAgentBackgroundItem(@Path("item_id") itemId: String): GenericOkResponse
 
     // ---------- AI Coach Butler: 复盘 + 教练记忆 (2026-06-11) ----------
     @POST("api/v2/ai/coach_review")

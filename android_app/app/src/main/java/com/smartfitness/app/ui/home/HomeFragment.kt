@@ -73,19 +73,16 @@ class HomeFragment : Fragment() {
                     // 空状态情感化: 不给新用户看一个冰冷的巨大 0
                     val unit = view?.findViewById<TextView>(R.id.stat_reps_unit)
                     val sub = view?.findViewById<TextView>(R.id.hero_sub)
-                    val banner = view?.findViewById<TextView>(R.id.banner_newbie)
                     if (s.totalReps <= 0) {
                         repsView.text = "GO!"
                         repsView.setTextColor(requireContext().getColor(R.color.primary))
                         unit?.visibility = View.GONE
                         sub?.visibility = View.VISIBLE
-                        banner?.visibility = View.VISIBLE
                     } else {
                         repsView.text = s.totalReps.toString()
                         repsView.setTextColor(requireContext().getColor(R.color.on_surface))
                         unit?.visibility = View.VISIBLE
                         sub?.visibility = View.GONE
-                        banner?.visibility = View.GONE
                     }
                 }
 

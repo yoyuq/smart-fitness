@@ -113,8 +113,8 @@ object ApiClient {
             .addInterceptor(authInterceptor)
             .addInterceptor(logger)
             .connectTimeout(15, TimeUnit.SECONDS)
-            // LLM 接口 (复盘/计划生成) 响应 30-90s, 30s 会在后端完成前超时
-            .readTimeout(120, TimeUnit.SECONDS)
+            // LLM 接口 (复盘/计划生成/组级 AI 教练) 响应可能 3-10 分钟
+            .readTimeout(600, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .pingInterval(20, TimeUnit.SECONDS)
             .build()

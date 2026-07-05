@@ -83,15 +83,71 @@ data class TrainingSession(
 
 // ---------------- Plans ----------------
 
+data class PlanAiDraftRequest(
+    val prompt: String,
+    val weeks: Int = 2,
+    @SerializedName("plan_name") val planName: String? = null,
+    val categories: List<String> = emptyList(),
+    @SerializedName("selected_items") val selectedItems: List<Map<String, String>> = emptyList(),
+    @SerializedName("weekly_training_days") val weeklyTrainingDays: Int? = null,
+    @SerializedName("session_minutes") val sessionMinutes: Int? = null
+)
+
+data class PlanExerciseItem(
+    val type: String = "",
+    val title: String = "",
+    val category: String = "custom",
+    val week: Int? = null,
+    val day: Int? = null,
+    val sets: Int = 0,
+    val reps: Int = 0,
+    @SerializedName("duration_min") val durationMin: Int = 0,
+    @SerializedName("distance_km") val distanceKm: Double = 0.0,
+    val intensity: String = "",
+    val note: String = ""
+)
+
+data class PlanAiDraftResponse(
+    val ok: Boolean = false,
+    val draft: Boolean = true,
+    val name: String? = null,
+    val reason: String? = null,
+    val exercises: List<PlanExerciseItem> = emptyList(),
+    val message: String? = null
+)
+
+data class PlanCheckinRequest(
+    val item: Map<String, Any>,
+    val note: String? = null
+)
+
+data class PlanCheckinResponse(
+    val ok: Boolean = false,
+    val message: String? = null,
+    @SerializedName("exercise_type") val exerciseType: String? = null
+)
+
 data class CreatePlanRequest(
     val name: String,
-    val exercises: String = "[]"
+    val exercises: Any = "[]"
 )
 
 data class CreatePlanResponse(
     val ok: Boolean,
     @SerializedName("plan_id") val planId: String? = null,
     val name: String? = null,
+    val message: String? = null,
+    val plan: WorkoutPlan? = null
+)
+
+data class UpdatePlanRequest(
+    val name: String? = null,
+    val exercises: Any? = null
+)
+
+data class UpdatePlanResponse(
+    val ok: Boolean = false,
+    val plan: WorkoutPlan? = null,
     val message: String? = null
 )
 
@@ -267,6 +323,181 @@ data class TrainingRepImageResponse(
     @SerializedName("has_images") val hasImages: Boolean = false,
     val error: String? = null
 )
+
+// ==================== AI Coach two-stage analysis ====================
+
+data class AiCoachFramesUsed(
+    val requested: Int? = null,
+    val actual: Int? = null,
+    val indices: List<Int>? = null,
+    @SerializedName("bottom_index") val bottomIndex: Int? = null,
+    val source: String? = null
+)
+
+data class AiCoachObservation(
+    @SerializedName("exercise_visible") val exerciseVisible: String? = null,
+    @SerializedName("alignment_cues") val alignmentCues: List<String> = emptyList(),
+    @SerializedName("observed_angles_deg") val observedAnglesDeg: Map<String, Any>? = null,
+    val tempo: String? = null,
+    val confidence: Double? = null,
+    @SerializedName("camera_angle") val cameraAngle: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    @SerializedName("frames_sent") val framesSent: Int? = null
+)
+
+data class AiCoachIssue(
+    val issue: String? = null,
+    val severity: String? = null,
+    val evidence: List<String>? = null
+)
+
+data class AiCoachPostureAssessment(
+    val summary: String? = null,
+    val issues: List<AiCoachIssue>? = null,
+    val strengths: List<String>? = null
+)
+
+data class AiCoachCompletionScore(
+    @SerializedName("overall_score") val overallScore: Double? = null,
+    val depth: Double? = null,
+    val control: Double? = null,
+    val symmetry: Double? = null,
+    val notes: String? = null
+)
+
+data class AiCoachGuidance(
+    val action: String? = null,
+    val cue: String? = null,
+    val evidence: List<String>? = null,
+    val target: String? = null
+)
+
+data class AiCoachAnalysis(
+    @SerializedName("posture_assessment") val postureAssessment: AiCoachPostureAssessment? = null,
+    @SerializedName("completion_score") val completionScore: AiCoachCompletionScore? = null,
+    @SerializedName("immediate_next_rep") val immediateNextRep: List<AiCoachGuidance>? = null,
+    @SerializedName("next_session") val nextSession: List<AiCoachGuidance>? = null,
+    val cautions: List<String>? = null
+)
+
+data class AiCoachResponse(
+    val ok: Boolean,
+    @SerializedName("rep_id") val repId: Long? = null,
+    @SerializedName("frames_used") val framesUsed: AiCoachFramesUsed? = null,
+    @SerializedName("stage1_conflicts") val stage1Conflicts: List<Map<String, Any?>>? = null,
+    val observation: AiCoachObservation? = null,
+    val analysis: AiCoachAnalysis? = null,
+    val note: String? = null,
+    val error: String? = null
+)
+
+data class AiCoachRequest(
+    val frames: Int? = null
+)
+
+
+// ==================== Session-level AI coach ====================
+
+data class SessionAiCoachIssue(
+    val issue: String? = null,
+    val severity: String? = null,
+    @SerializedName("affected_reps") val affectedReps: List<Int>? = null,
+    val evidence: String? = null
+)
+
+data class SessionAiCoachOverallAssessment(
+    val strengths: List<String>? = null,
+    @SerializedName("common_issues") val commonIssues: List<SessionAiCoachIssue>? = null,
+    val inconsistencies: List<String>? = null,
+    @SerializedName("reps_with_concern") val repsWithConcern: List<Int>? = null,
+    @SerializedName("overall_score") val overallScore: Double? = null,
+    @SerializedName("performance_rating") val performanceRating: String? = null
+)
+
+data class SessionAiCoachGuidance(
+    @SerializedName("immediate_corrections") val immediateCorrections: List<String>? = null,
+    @SerializedName("next_session_focus") val nextSessionFocus: List<String>? = null,
+    @SerializedName("progression_or_regression") val progressionOrRegression: String? = null,
+    val cautions: List<String>? = null
+)
+
+data class SessionAiCoachStage1Result(
+    @SerializedName("rep_index") val repIndex: Int? = null,
+    val ok: Boolean? = null,
+    val error: String? = null,
+    val provider: String? = null,
+    val model: String? = null
+)
+
+data class SessionAiCoachResponse(
+    val ok: Boolean,
+    @SerializedName("session_id") val sessionId: String? = null,
+    val exercise: String? = null,
+    @SerializedName("rep_count") val repCount: Int? = null,
+    @SerializedName("reps_count") val repsCount: Int? = null,
+    @SerializedName("overall_assessment") val overallAssessment: SessionAiCoachOverallAssessment? = null,
+    @SerializedName("rep_by_rep_notes") val repByRepNotes: List<String>? = null,
+    val guidance: SessionAiCoachGuidance? = null,
+    @SerializedName("data_gaps") val dataGaps: List<String>? = null,
+    val confidence: Double? = null,
+    @SerializedName("stage1_results") val stage1Results: List<SessionAiCoachStage1Result>? = null,
+    @SerializedName("stage1_ok_count") val stage1OkCount: Int? = null,
+    @SerializedName("stage1_total") val stage1Total: Int? = null,
+    val error: String? = null,
+    val note: String? = null,
+    @SerializedName("report_id") val reportId: String? = null,
+    val saved: Boolean? = null
+)
+
+// AI Coach Reports archive
+data class AiCoachReportSummary(
+    @SerializedName("report_id") val reportId: String,
+    @SerializedName("session_id") val sessionId: String? = null,
+    val exercise: String? = null,
+    @SerializedName("rep_count") val repCount: Int? = null,
+    @SerializedName("frames_per_rep") val framesPerRep: Int? = null,
+    @SerializedName("overall_score") val overallScore: Double? = null,
+    @SerializedName("performance_rating") val performanceRating: String? = null,
+    @SerializedName("stage1_ok_count") val stage1OkCount: Int? = null,
+    @SerializedName("stage1_total") val stage1Total: Int? = null,
+    val note: String? = null,
+    @SerializedName("created_at") val createdAt: Double? = null
+)
+
+data class AiCoachReportListResponse(
+    val ok: Boolean,
+    val reports: List<AiCoachReportSummary> = emptyList()
+)
+
+data class AiCoachReportDetail(
+    val ok: Boolean,
+    @SerializedName("report_id") val reportId: String,
+    @SerializedName("session_id") val sessionId: String? = null,
+    val exercise: String? = null,
+    @SerializedName("rep_count") val repCount: Int? = null,
+    @SerializedName("frames_per_rep") val framesPerRep: Int? = null,
+    @SerializedName("overall_score") val overallScore: Double? = null,
+    @SerializedName("performance_rating") val performanceRating: String? = null,
+    @SerializedName("stage1_ok_count") val stage1OkCount: Int? = null,
+    @SerializedName("stage1_total") val stage1Total: Int? = null,
+    val note: String? = null,
+    @SerializedName("created_at") val createdAt: Double? = null,
+    val report: SessionAiCoachResponse? = null
+)
+
+data class AiCoachReportNoteUpdate(val note: String? = null)
+data class AiCoachReportUpdateResponse(
+    val ok: Boolean,
+    @SerializedName("report_id") val reportId: String? = null,
+    val note: String? = null
+)
+data class AiCoachReportDeleteResponse(
+    val ok: Boolean,
+    @SerializedName("report_id") val reportId: String? = null,
+    val deleted: Boolean? = null
+)
+
 
 // ---------------- D-05 Device Bind ----------------
 data class BindDeviceRequest(
@@ -537,12 +768,16 @@ data class AchievementStats(
 data class AiPlanGenerateRequest(
     val goal: String,
     val weeks: Int,
+    @SerializedName("import_to_plans") val importToPlans: Boolean = true,
 )
 
 data class AiPlanGenerateResponse(
     val ok: Boolean = false,
     val plans: List<AiPlanDay> = emptyList(),
     val message: String? = null,
+    @SerializedName("plan_name") val planName: String? = null,
+    @SerializedName("plan_id") val planId: String? = null,
+    val draft: Boolean? = null,
 )
 
 data class AiPlanDay(
@@ -612,6 +847,28 @@ data class AgentApprovalActionResponse(
     @SerializedName("run_status") val runStatus: String? = null
 )
 
+data class AgentPlanExercise(
+    val type: String = "",
+    val title: String = "",
+    val category: String = "custom",
+    val sets: Int = 0,
+    val reps: Int = 0,
+    val note: String = "",
+    val week: Int? = null,
+    val day: Int? = null,
+    @SerializedName("duration_min") val durationMin: Int = 0,
+    @SerializedName("distance_km") val distanceKm: Double = 0.0,
+    val intensity: String = ""
+)
+
+data class AgentPlanDraft(
+    val name: String = "Agent 生成计划",
+    val goal: String? = null,
+    val weeks: Int? = null,
+    val reason: String? = null,
+    val exercises: List<AgentPlanExercise> = emptyList()
+)
+
 data class AgentChatResponse(
     val ok: Boolean = false,
     val mode: String? = null,
@@ -621,6 +878,7 @@ data class AgentChatResponse(
     @SerializedName("run_id") val runId: String? = null,
     @SerializedName("run_status") val runStatus: String? = null,
     @SerializedName("agent_loop") val agentLoop: AgentLoopInfo? = null,
+    @SerializedName("plan_draft") val planDraft: AgentPlanDraft? = null,
     val error: String? = null
 )
 
@@ -629,7 +887,23 @@ data class AgentLoopInfo(
     val turns: Int? = null,
     @SerializedName("forced_tool") val forcedTool: Boolean? = null,
     val fallback: Boolean? = null,
-    val todos: List<AgentTodo> = emptyList()
+    val todos: List<AgentTodo> = emptyList(),
+    val recovery: List<AgentRecoveryEvent> = emptyList(),
+    @SerializedName("max_turns_reached") val maxTurnsReached: Boolean? = null,
+    @SerializedName("total_timeout_reached") val totalTimeoutReached: Boolean? = null
+)
+
+data class AgentRecoveryEvent(
+    val event: String = "",
+    val provider: String? = null,
+    val tool: String? = null,
+    val reason: String? = null,
+    @SerializedName("error_type") val errorType: String? = null,
+    val message: String? = null,
+    @SerializedName("circuit_opened") val circuitOpened: Boolean? = null,
+    @SerializedName("cooldown_until") val cooldownUntil: Long? = null,
+    val ok: Boolean? = null,
+    val turns: Int? = null
 )
 
 data class AgentTodo(
@@ -657,10 +931,75 @@ data class AgentRun(
     @SerializedName("final_text") val finalText: String? = null,
     val domains: List<String> = emptyList(),
     val todos: List<AgentTodo> = emptyList(),
+    val trace: List<Any> = emptyList(),
+    val error: Any? = null,
     @SerializedName("pending_approval_ids") val pendingApprovalIds: List<String> = emptyList(),
     @SerializedName("created_at") val createdAt: Long? = null,
     @SerializedName("updated_at") val updatedAt: Long? = null,
     @SerializedName("completed_at") val completedAt: Long? = null
+)
+
+data class AgentHealthResponse(
+    val ok: Boolean = false,
+    val providers: List<AgentProviderHealth> = emptyList(),
+    val recent: AgentRecentStats? = null,
+    val error: String? = null
+)
+
+data class AgentKnowledgeResponse(
+    val ok: Boolean = false,
+    val domains: List<Map<String, Any>> = emptyList(),
+    val error: String? = null
+)
+
+data class AgentProviderHealth(
+    val provider: String = "",
+    @SerializedName("consecutive_failures") val consecutiveFailures: Int = 0,
+    @SerializedName("cooldown_until") val cooldownUntil: Long = 0,
+    @SerializedName("last_error_type") val lastErrorType: String? = null,
+    @SerializedName("success_count") val successCount: Int = 0,
+    @SerializedName("failure_count") val failureCount: Int = 0,
+    @SerializedName("cooling_down") val coolingDown: Boolean = false
+)
+
+data class AgentRecentStats(
+    @SerializedName("window_sec") val windowSec: Int = 3600,
+    @SerializedName("total_runs") val totalRuns: Int = 0,
+    @SerializedName("by_status") val byStatus: Map<String, Int> = emptyMap(),
+    val events: Map<String, Int> = emptyMap()
+)
+
+data class AgentBackgroundRunRequest(
+    val job: String = "daily_checkin"
+)
+
+data class AgentBackgroundItemListResponse(
+    val ok: Boolean = false,
+    val items: List<AgentBackgroundItem> = emptyList(),
+    val error: String? = null
+)
+
+data class AgentBackgroundRunResponse(
+    val ok: Boolean = false,
+    val job: String? = null,
+    val created: Int = 0,
+    val items: List<AgentBackgroundItem> = emptyList(),
+    val error: String? = null
+)
+
+data class AgentBackgroundItem(
+    @SerializedName("item_id") val itemId: String = "",
+    @SerializedName("user_id") val userId: Long? = null,
+    val job: String = "",
+    val kind: String = "",
+    val title: String = "",
+    val message: String = "",
+    val status: String = "pending",
+    @SerializedName("requires_approval") val requiresApproval: Boolean = false,
+    @SerializedName("created_at") val createdAt: Long? = null,
+    @SerializedName("updated_at") val updatedAt: Long? = null,
+    @SerializedName("read_at") val readAt: Long? = null,
+    val payload: Map<String, Any?> = emptyMap()
 )
 
 // =============================================================

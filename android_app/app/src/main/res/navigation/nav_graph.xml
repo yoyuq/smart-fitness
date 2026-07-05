@@ -31,6 +31,11 @@
         android:label="@string/plans" />
 
     <fragment
+        android:id="@+id/planBuilderFragment"
+        android:name="com.smartfitness.app.ui.plans.PlanBuilderFragment"
+        android:label="制定训练计划" />
+
+    <fragment
         android:id="@+id/profileFragment"
         android:name="com.smartfitness.app.ui.profile.ProfileFragment"
         android:label="@string/profile" />

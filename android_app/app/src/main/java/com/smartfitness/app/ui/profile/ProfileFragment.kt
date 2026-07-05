@@ -146,6 +146,7 @@ class ProfileFragment : Fragment() {
                 cell(R.drawable.ic_g_body, "身体指标") { findNavController().navigate(R.id.bodyMetricsFragment) }
                 cell(R.drawable.ic_g_sync, "同步信息") { syncUserData() }
                 cell(R.drawable.ic_g_goal, "我的目标") { findNavController().navigate(R.id.goalsFragment) }
+                cell(R.drawable.ic_nav_plans, "我的计划") { findNavController().navigate(R.id.plansFragment) }
                 cell(R.drawable.ic_g_training_data, "训练数据") { findNavController().navigate(R.id.trainingDataFragment) }
                 cell(R.drawable.ic_g_server, "设置") { showSettingsDialog() }
                 cell(R.drawable.ic_g_logout, "退出登录", R.color.error) {

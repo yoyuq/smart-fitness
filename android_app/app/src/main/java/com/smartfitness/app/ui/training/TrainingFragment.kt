@@ -18,9 +18,13 @@ import android.view.animation.AnimationUtils
 import android.widget.ArrayAdapter
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import android.view.Gravity
+import android.graphics.drawable.GradientDrawable
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import androidx.fragment.app.Fragment
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -616,11 +620,24 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         } else {
             section("报告", resp?.reportText ?: "本次未生成报告 (可能动作太少或 AI 暂不可用)。")
         }
+        val sidSession = trainingSessionId
+        if (!sidSession.isNullOrEmpty()) {
+            box.addView(com.google.android.material.button.MaterialButton(ctx).apply {
+                text = "AI 视觉分析"; cornerRadius = dp(12)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(8) }
+                setOnClickListener {
+                    sheet.dismiss()
+                    runSessionAiCoach(sidSession, exKey, reps, durationS, avgForm)
+                }
+            })
+        }
         box.addView(com.google.android.material.button.MaterialButton(ctx).apply {
             text = "完成"; cornerRadius = dp(12)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(16) }
+            ).apply { topMargin = dp(8) }
             setOnClickListener { sheet.dismiss() }
         })
         sheet.setContentView(scroll)
@@ -660,6 +677,12 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         if (onAnalyze != null) {
             // 完整运动但未开启自动分析: 提供按需让 AI 教练分析
             b.setNeutralButton("🧠 让 AI 教练分析") { _, _ -> onAnalyze() }
+        }
+        val sss = trainingSessionId
+        if (!sss.isNullOrEmpty()) {
+            b.setNegativeButton("组级 AI 视觉") { _, _ ->
+                runSessionAiCoach(sss, exKey, reps, durationS, avgForm)
+            }
         }
         b.show()
     }
@@ -941,7 +964,149 @@ class TrainingFragment : Fragment(), WebSocketManager.Listener, TextToSpeech.OnI
         }
     }
 
-    override fun onDestroyView() {
+    
+    // ======================== Session-level AI coach (组级视觉分析) ========================
+
+    /** Call session-level AI coach (vision per rep + LLM comprehensive report). */
+    private fun runSessionAiCoach(sid: String, exKey: String, reps: Int, durS: Long, avgForm: Double?) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val loading = MaterialAlertDialogBuilder(requireContext())
+                .setTitle("AI \u89c6\u89c9\u5206\u6790\u4e2d")
+                .setMessage("\u6b63\u5728\u9010 rep \u5206\u6790\u59ff\u6001... (\u7ea660\u79d2)")
+                .setCancelable(true).show()
+            val result: com.smartfitness.app.model.SessionAiCoachResponse? = withContext(Dispatchers.IO) {
+                try {
+                    ApiClient.service.trainingSessionAiCoach(sid)
+                } catch (e: Exception) { null }
+            }
+            if (isAdded) {
+                loading.dismiss()
+                if (result != null && result.ok) {
+                    showSessionAiCoachSheet(exKey, reps, durS, avgForm, result)
+                } else {
+                    val err = result?.error ?: "\u8bf7\u6c42\u5931\u8d25"
+                    Toast.makeText(requireContext(), "AI \u5206\u6790\u5931\u8d25: $err", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun showSessionAiCoachSheet(
+        exKey: String, reps: Int, durationS: Long, avgForm: Double?,
+        resp: com.smartfitness.app.model.SessionAiCoachResponse
+    ) {
+        val ctx = requireContext()
+        val sheet = BottomSheetDialog(ctx)
+        val scroll = ScrollView(ctx)
+        val dp = { v: Int -> (ctx.resources.displayMetrics.density * v).toInt() }
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFFFFFFFF.toInt())
+            setPadding(dp(24), dp(20), dp(24), dp(24))
+        }
+        scroll.addView(box)
+        box.addView(View(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(12)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(2).toFloat(); setColor(0xFFE0E0E0.toInt())
+            }
+        })
+        box.addView(TextView(ctx).apply {
+            text = "\u7ec4\u7ea7\u89c6\u89c9 AI \u5206\u6790"; textSize = 22f
+        })
+        val mm = durationS / 60; val ss = durationS % 60
+        box.addView(TextView(ctx).apply {
+            text = "$exKey - $reps - ${String.format("%02d:%02d", mm, ss)}" +
+                    (avgForm?.let { " - av ${String.format("%.0f", it)}" } ?: "")
+            textSize = 13f; setTextColor(0xFF9094A6.toInt()); setPadding(0, dp(4), 0, dp(8))
+        })
+
+        val oa = resp.overallAssessment
+        if (oa != null) {
+            if (oa.overallScore != null || oa.performanceRating != null) {
+                box.addView(TextView(ctx).apply {
+                    text = "score: ${oa.overallScore?.toInt() ?: "-"}/100" +
+                            (oa.performanceRating?.let { " ($it)" } ?: "")
+                    textSize = 18f; setTextColor(0xFF2E7D32.toInt()); setPadding(0, dp(8), 0, dp(4))
+                })
+            }
+            oa.strengths?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "strengths"; textSize = 16f; setPadding(0, dp(12), 0, dp(2)) })
+                for (s in it) {
+                    box.addView(TextView(ctx).apply { text = "  - $s"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(1), 0, dp(1)) })
+                }
+            }
+            oa.commonIssues?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "issues"; textSize = 16f; setPadding(0, dp(12), 0, dp(2)) })
+                for (issue in it) {
+                    val repStr = issue.affectedReps?.let { " (rep ${it.joinToString(",")})" } ?: ""
+                    val sevIcon = when (issue.severity) { "high" -> "!"; "medium" -> "-"; else -> "*" }
+                    box.addView(TextView(ctx).apply { text = "  $sevIcon ${issue.issue}$repStr"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(1), 0, dp(1)) })
+                }
+            }
+            oa.inconsistencies?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "trends"; textSize = 16f; setPadding(0, dp(12), 0, dp(2)) })
+                for (s in it) {
+                    box.addView(TextView(ctx).apply { text = "  - $s"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(1), 0, dp(1)) })
+                }
+            }
+            oa.repsWithConcern?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "watch: ${it.joinToString(", ")}"; textSize = 14f; setTextColor(0xFFE67E22.toInt()); setPadding(0, dp(8), 0, dp(2)) })
+            }
+        }
+
+        resp.repByRepNotes?.takeIf { it.isNotEmpty() }?.let {
+            box.addView(TextView(ctx).apply { text = "rep notes"; textSize = 16f; setPadding(0, dp(12), 0, dp(2)) })
+            for (note in it) {
+                box.addView(TextView(ctx).apply { text = "  - $note"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(2), 0, dp(2)) })
+            }
+        }
+
+        val g = resp.guidance
+        if (g != null) {
+            g.immediateCorrections?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "fix now"; textSize = 16f; setPadding(0, dp(12), 0, dp(2)) })
+                for (s in it) {
+                    box.addView(TextView(ctx).apply { text = "  - $s"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(1), 0, dp(1)) })
+                }
+            }
+            g.nextSessionFocus?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "next focus"; textSize = 16f; setPadding(0, dp(12), 0, dp(2)) })
+                for (s in it) {
+                    box.addView(TextView(ctx).apply { text = "  - $s"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(1), 0, dp(1)) })
+                }
+            }
+            g.cautions?.takeIf { it.isNotEmpty() }?.let {
+                box.addView(TextView(ctx).apply { text = "caution"; textSize = 16f; setTextColor(0xFFC62828.toInt()); setPadding(0, dp(12), 0, dp(2)) })
+                for (s in it) {
+                    box.addView(TextView(ctx).apply { text = "  - $s"; textSize = 14f; setTextColor(0xFF2D2D2D.toInt()); setPadding(0, dp(1), 0, dp(1)) })
+                }
+            }
+        }
+
+        resp.confidence?.let { co ->
+            box.addView(TextView(ctx).apply {
+                text = "conf: ${String.format("%.0f", co * 100)}%" +
+                        (resp.stage1OkCount?.let { " - frames ${it}/${resp.stage1Total}" } ?: "")
+                textSize = 12f; setTextColor(0xFF9094A6.toInt()); setPadding(0, dp(8), 0, dp(4))
+            })
+        }
+
+        box.addView(MaterialButton(ctx).apply {
+            text = "done"; cornerRadius = dp(12)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(16) }
+            setOnClickListener { sheet.dismiss() }
+        })
+        sheet.setContentView(scroll)
+        sheet.show()
+    }
+
+override fun onDestroyView() {
         super.onDestroyView()
         handler.removeCallbacks(timerRunnable)
         ws?.close(); ws = null

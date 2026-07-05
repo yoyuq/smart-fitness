@@ -1,0 +1,13 @@
+# Temp / diagnostic files generated during emulator UI acceptance
+/_*.py
+/_*.xml
+/_*.txt
+/_*.log
+/_*.png
+/agent*.xml
+/approval_*.xml
+/health_*.xml
+/memory_flow.xml
+/run_detail*.xml
+/runs*.xml
+/window.xml
