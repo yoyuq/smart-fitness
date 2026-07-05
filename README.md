@@ -10,12 +10,11 @@
 
 ### AI-coach report (Stage-2 LLM upgrade)
 
-Same training session, three generations of Stage-2 reasoning model — you can literally see the report get sharper:
+After switching Stage-2 to the Aliyun Bailian 2026 flagship chain, the same session now produces per-rep numeric diagnostics (e.g. `depth 82.8°`, `trunk lean 30°`, `knee angle 120°`) plus concrete regression drills (box squat / goblet squat) and preference-aware cautions:
 
-| v1 · `qwen-plus` (2024, 1400 tok) | v2 · `doubao-seed-1-6-pro` (1400 tok) | v3 · `qwen3.7-max` (2026, 6000 tok) |
-|---|---|---|
-| ![v1](assets/screenshots/ai_coach_report_v1_qwen-plus.png) | ![v2](assets/screenshots/ai_coach_report_v2_doubao.png) | ![v3](assets/screenshots/ai_coach_report_v3_qwen3-7-max.png) |
-| Generic tips | Coach-style advice | Per-rep numeric diagnostics (`depth 82.8°`, `trunk lean 30°`), concrete regression drills (box squat / goblet squat), and user-preference-aware cautions |
+| Summary card | Detailed rep-by-rep analysis |
+|---|---|
+| ![Report summary](assets/screenshots/ai_coach_report_summary.png) | ![Report detail](assets/screenshots/ai_coach_report_detail.png) |
 
 The live Stage-2 provider chain (see `backend/fitness_agent/vision_pipeline.py`):
 
