@@ -10,11 +10,12 @@
 
 ### AI-coach report (Stage-2 LLM upgrade)
 
-After switching Stage-2 to the Aliyun Bailian 2026 flagship chain, the same session now produces per-rep numeric diagnostics (e.g. `depth 82.8°`, `trunk lean 30°`, `knee angle 120°`) plus concrete regression drills (box squat / goblet squat) and preference-aware cautions:
+Same squat session, before and after switching Stage-2 to the Aliyun Bailian 2026 flagship chain (`qwen3.7-max` primary, 6000 reasoning tokens). Both screenshots below were captured live from the emulator on 2026-07-06.
 
-| Summary card | Detailed rep-by-rep analysis |
-|---|---|
-| ![Report summary](assets/screenshots/ai_coach_report_summary.png) | ![Report detail](assets/screenshots/ai_coach_report_detail.png) |
+| **Before** · `qwen-plus` (2024, 1400 tok) | **After (summary)** · `qwen3.7-max` (2026, 6000 tok) | **After (detail)** · `qwen3.7-max` |
+|---|---|---|
+| ![v1](assets/screenshots/ai_coach_v1_original.png) | ![v3 summary](assets/screenshots/ai_coach_v3_summary.png) | ![v3 detail](assets/screenshots/ai_coach_v3_detail.png) |
+| Score 88 · short paragraphs · no regression drills · no preference-aware cautions | Score 89 · named rep callouts (`Rep 3/13/14 perfect depth`, `Rep 11/15 pelvic rotation`) · per-set inconsistency flags | Concrete regression plan (**回归箱式深蹲 / 减轻负重**), pain-warning, and USER.md-aware nutrition tip (**香蕉牛奶** — pulled from the "爱喝高碳水饮品" preference) + 16-group `qwen-vl-max` visual diagnostics |
 
 The live Stage-2 provider chain (see `backend/fitness_agent/vision_pipeline.py`):
 
