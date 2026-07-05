@@ -25,11 +25,55 @@ _log = logging.getLogger("exercise_detector")
 
 # rep 计数默认配置（与历史运行值一致，保证 exercises.json 缺失时行为不变）。
 # joint 仅作文档说明，关节角度的实际选取仍在各 count_* 方法里。
+#
+# 阈值来源（interior-angle 约定：180° = 完全伸展，越弯越小；文献常用 flexion 角，
+# 二者互补：interior = 180° - flexion）：
+#
+# * squat  down=100 (interior≈parallel), up=160 (near-extension)
+#   - Escamilla RF. Med Sci Sports Exerc. 2001;33(1):127-41. PMID:11194098
+#     "parallel squat = thighs parallel to ground at max knee flexion";
+#     safe range 0-100° knee flexion → interior 80-180°. Parallel ≈ interior 90°;
+#     取 100° 作为"到位"下限，比 strict parallel 略宽松，避免家用挫败感。
+#   - O'Neill KE, Psycharakis SG. Sports Biomech. 2024;23(5):555-566. PMID:33660588
+#     实验中用 "90° knee angle (parallel)" 与 "125° knee angle (half)" 两档；
+#     interior 100° 处于两档之间，防止 half squat 被误计数。
+#   - Martínez-Cava A, et al. J Sports Sci. 2019;37(10):1088-1096. PMID:30426840
+#     Half / parallel / full 三档命名是学术界通用框架。
+#
+# * push_up  down=90 (elbow≈90° chest-to-ground), up=150 (near-lockout)
+#   - Dhahbi W, et al. Sports Biomech. 2022;21(1):1-40. PMID:30284496
+#     Systematic review: standard push-up bottom ≈ elbow flexion 90° (interior 90°).
+#   - McGill SM. J Strength Cond Res. 2014;28(1):105-16. PMID:24088865
+#     标准 push-up spine compression 数据集来源；ROM 与上文一致。
+#
+# * lunge  down=100 (front knee ~parallel), up=145 (near-standing)
+#   - Escamilla RF, et al. J Appl Biomech. 2022;38(4):210-220. PMID:35697336
+#     Lunge descent 覆盖 knee flexion 50°-100°；bottom 约 90° flexion → interior 90°；
+#     取 100° 作为"到位"下限；up 145° = 大腿接近直立但仍轻微弯（clinical asymmetry 阈值参考 Hall 2015）。
+#
+# * bicep_curl  down=110, up=35 (方向反转：curl 越弯 elbow interior 越小)
+#   - Pedrosa GF, et al. Sports. 2023;11(2):39. PMID:36828324
+#     标准 curl ROM 0-135° flexion (interior 45-180°); curl top ≈ interior 30-45°。
+#
+# * shoulder_press  down=30 (肩内收), up=130 (推举过头)
+#   - Gundersen AH, et al. Sports Biomech. 2025 (online). PMID:41335596
+#     Overhead press lockout: elbow interior ~170-180°, glenohumeral ~150-180°。
+#     Down 阶段肩角约 30° 起始（拳头齐肩）。
+#
+# * jumping_jack  down=120, up=165
+#   - Lam JH, Bordoni B. StatPearls NBK537148 (2023).
+#     Full arm abduction 0-180° at glenohumeral joint；手臂过头顶 ≥ 150° 视为完成。
+#
+# rep counting 算法本身（peak-prominence detection）：
+#   - Jaiswal A, Chauhan G, Srivastava N. ACM RecSys 2023. arxiv:2310.07221
+#     MediaPipe + peak-prominence detection 是当前推荐的实时 rep-counting 方法。
+#
+# 单一 evidence 来源：`backend/docs/rep_completion_algorithm_evidence.md`
 _DEFAULT_COUNT_CFG: Dict[str, Dict[str, float]] = {
-    "squat":          {"joint": "avg_knee",     "down": 130, "up": 145},
+    "squat":          {"joint": "avg_knee",     "down": 100, "up": 160},   # was 130/145
     "push_up":        {"joint": "avg_elbow",    "down": 90,  "up": 150},
     "jumping_jack":   {"joint": "avg_elbow",    "down": 120, "up": 165},
-    "lunge":          {"joint": "min_knee",     "down": 100, "up": 145},
+    "lunge":          {"joint": "min_knee",     "down": 100, "up": 145},   # was 100/145 (kept)
     "bicep_curl":     {"joint": "avg_elbow",    "down": 110, "up": 35},
     "shoulder_press": {"joint": "avg_shoulder", "down": 30,  "up": 130},
 }

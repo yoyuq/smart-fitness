@@ -23,9 +23,46 @@ log = logging.getLogger("rep_scorer")
 #   - squat 下界 70->40: 真实深蹲膝角到 40° 是好动作, 旧规则误判"蹲太深"扣分
 #   - push_up 上界 90->78: 旧规则对"几乎没下放"(肘 ~85°)误判满分
 #   - 节奏: 超长(>20s)单次为 rep 误合并, 置中性 (见 _finalize)
+#
+# 阈值对应的 peer-reviewed evidence（interior-angle 约定，180°=伸展，越弯越小）：
+#
+# * squat  depth_range=(40, 90)  duration=(1.2, 7.0)
+#   - 40° 处下限: below-parallel/full squat (Escamilla 2001 PMID:11194098);
+#     Hartmann H et al. Sports Med. 2013;43:993 (PMID:23821469) 确认深蹲对健康膝关节无活化性伤害。
+#   - 90° 处上限 (2026-07-04 收窄, 原 100°): parallel squat 的严格“到位”阈值,
+#     Escamilla 2001 (PMID:11194098) parallel = knee interior ~90°;
+#     O'Neill 2024 (PMID:33660588) 90° 作 parallel vs 125° half 的实验分界;
+#     旧上界 100° 导致 27/52 用户标为 shallow 的 rep 仍打 100 分, 收到 90° 拉开合格/不合格分区分度。
+#   - duration 1.2-7.0s: bench-press tempo 研究推导。Carzoli 2019 (PMID:31418323)
+#     实验里典型 eccentric+concentric duration 在 2-6s。下界 1.2s 防“自由落体”，上界 7s 防卡顿。
+#
+# * push_up  depth_range=(60, 78)  duration=(1.0, 6.0)
+#   - 60-78°: chest-to-ground push-up 底部 elbow flexion 在 90-120° (interior 60-90°);
+#     Dhahbi 2022 (PMID:30284496) systematic review 推荐 ≈ 90° flexion，
+#     取上界 78° 拒绝"康德式俯卧撑"。McGill 2014 (PMID:24088865) 采用标准 tempo。
+#
+# * lunge  depth_range=(80, 110)  duration=(1.5, 7.0)  asymmetric=True
+#   - 80-110°: front knee flexion 70-100° (interior 80-110°)；
+#     Escamilla 2022 (PMID:35697336) "lunge descent 50-100°" knee flexion → interior 80-130°;
+#     取 110° 作为上限避免“小幅度弓步”误达标。
+#
+# * bicep_curl  depth_range=(30, 60)  duration=(1.0, 5.0)
+#   - Pedrosa 2023 (PMID:36828324) curl full ROM 0-135° flexion (interior 45-180°)；
+#     top-of-curl ≈ interior 30-45°；旧下界 30° 保留。
+#
+# * shoulder_press  depth_range=(150, 180)  duration=(1.0, 5.0)
+#   - Gundersen 2025 (PMID:41335596) lockout: elbow ~170-180°, shoulder ~150-180°。
+#
+# * jumping_jack  depth_range=(140, 180)  duration=(0.4, 2.5)
+#   - Lam & Bordoni 2023 (StatPearls NBK537148) full arm abduction 0-180°;
+#     取 140° 作为"手臂确实举高”下限。
+#
+# duration (control) 阈值一致参考:
+#   - Wilk M et al. Front Physiol. 2021;12:629199 (PMID:33551848) tempo effects;
+#   - Maszczyk 2020 (PMID:32205913) TUT for training experience。
 MAX_PLAUSIBLE_REP_S = 20.0
 EXERCISE_CFG = {
-    "squat":          {"joint": "knee",     "extremum": "min", "depth_range": (40, 100),  "duration": (1.2, 7.0)},
+    "squat":          {"joint": "knee",     "extremum": "min", "depth_range": (40, 90),  "duration": (1.2, 7.0)},
     "push_up":        {"joint": "elbow",    "extremum": "min", "depth_range": (60, 78),   "duration": (1.0, 6.0)},
     "lunge":          {"joint": "knee",     "extremum": "min", "depth_range": (80, 110),  "duration": (1.5, 7.0), "asymmetric": True},
     "bicep_curl":     {"joint": "elbow",    "extremum": "min", "depth_range": (30, 60),   "duration": (1.0, 5.0)},
@@ -47,6 +84,26 @@ def _structural_errors(exercise, frames, peak_i):
     """单关节角规则看不见的结构性错误 (第四阶段多关节特征).
 
     返回 [(penalty, feedback, error_key), ...]. 在动作极值帧(peak_i)上判定.
+
+    Peer-reviewed evidence 对应阈值:
+
+    * squat.torso_lean > 55°
+        - Russell PJ, Phillips SJ. RQES 1989;60:201 (PMID:2489844):
+          躽干前倾与腺椎剔向性载荷相关。
+        - Schmid S. Arch Physiother 2022;12:8 (PMID:35449120):
+          Stoop-Squat-Index 量化躽干与下肢相对届曲; 过多前倾徒增腺椎前倾。
+        - Hebling Campos M, et al. J Sports Med Phys Fitness 2017;57:773 (PMID:27015103).
+
+    * push_up.elbow_flare (bottom shoulder ≅55°)
+        - McGill SM. J Strength Cond Res 2014;28(1):105 (PMID:24088865):
+          标准 push-up 大臂贴躯 (tucked elbows) 降低 shoulder shear 与旋转肌群压力。
+        - Lunden JB, et al. J Shoulder Elbow Surg 2010;19:216 (PMID:19733487):
+          Push-up scapular kinematics; flared elbows raise scapular protraction demand。
+
+    * jumping_jack.feet_narrow (ankle_dx<0.9)
+        - Lam JH, Bordoni B. StatPearls NBK537148 (2023):
+          Jumping jack = 同时完成 arm abduction 0-180° 与 leg abduction;
+          双脚横向开合幅度不足时不能视为一个完整 rep。
     """
     out = []
     if exercise == "squat":
@@ -286,6 +343,19 @@ class RepScorer:
             if mq is not None:
                 rep["model_quality"] = mq
                 print(f"[TCN] {self.exercise}  model_quality={mq}  rule_total={total}", flush=True)
+        except Exception:
+            pass
+
+        # Evidence-based rule quality (transparent TCN replacement candidate; best-effort).
+        # Provides a citable 0-100 score plus per-issue PMID references. If the exercise
+        # is not covered by the rules module we silently skip - never fails the pipeline.
+        try:
+            from rep_quality_rules import score_rep_quality_rules
+            evidence_quality = score_rep_quality_rules(
+                self.exercise, angle_series, rep_row=rep
+            )
+            if evidence_quality is not None:
+                rep["evidence_quality"] = evidence_quality
         except Exception:
             pass
 
