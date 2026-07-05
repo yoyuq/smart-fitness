@@ -1,6 +1,6 @@
 # Smart Fitness Guidance System
 
-**智能健身指导系统** — AI-powered real-time exercise coaching system with computer vision and IoT sensors.
+**智能健身指导系统** — AI-powered real-time exercise coaching system built on a single ESP32-CAM (AI-Thinker, with an OV2640 camera module), a Windows/macOS/Linux backend, and an Android companion app.
 
 ## Screenshots
 
@@ -33,34 +33,41 @@ volc / volc-legacy             ← last resort
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  Perception Layer (ESP32-S3)              │
-│  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐   │
-│  │ OV5640  │ │ MAX30102 │ │ MPU-6060 │ │ MSM261S4030│  │
-│  │ Camera  │ │ HR Sensor│ │ 6-axis   │ │ Microphone│   │
-│  └────┬────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘   │
-│       └───────────┴────────────┴──────────────┘          │
-│                        │ I2C / I2S                       │
-│                 ┌──────┴──────┐                          │
-│                 │ ESP32-S3 MCU │ ← WiFi + MQTT           │
-│                 └──────┬──────┘                          │
-└────────────────────────┼─────────────────────────────────┘
-                         │ MQTT over TLS
-┌────────────────────────┼─────────────────────────────────┐
-│                 ┌──────┴──────┐     Edge PC (Local)        │
-│                 │  Mosquitto  │                           │
-│                 │  MQTT Broker│                           │
-│                 └──────┬──────┘                           │
-│                        │                                  │
-│              ┌─────────┴─────────┐                       │
-│              │   FastAPI Server   │                       │
-│              │  (Pose + MQTT API) │                       │
-│              └─────────┬─────────┘                       │
-│                        │                                  │
-│              ┌─────────┴─────────┐                       │
-│              │  MediaPipe Pose    │ ← AI Vision Engine    │
-│              └───────────────────┘                       │
-└──────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    Edge Camera Node                        │
+│                                                            │
+│                 ┌──────────────┐                           │
+│                 │  OV2640      │  camera module            │
+│                 │  Camera      │                           │
+│                 └──────┬───────┘                           │
+│                        │ DVP                               │
+│                 ┌──────┴───────┐                           │
+│                 │  ESP32-CAM   │  AI-Thinker board         │
+│                 │  (WiFi MCU)  │  MJPEG + HTTP POST        │
+│                 └──────┬───────┘                           │
+└────────────────────────┼───────────────────────────────────┘
+                         │ WiFi (HTTP + WebSocket)
+┌────────────────────────┼───────────────────────────────────┐
+│                 ┌──────┴───────┐   Local backend (PC)      │
+│                 │  FastAPI     │                           │
+│                 │  (v2 REST +  │                           │
+│                 │   WS + MQTT) │                           │
+│                 └──────┬───────┘                           │
+│                        │                                   │
+│    ┌───────────────────┼───────────────────┐               │
+│    │                   │                   │               │
+│ ┌──┴──────────┐  ┌─────┴─────┐  ┌──────────┴──────────┐    │
+│ │ Pose engine │  │ Rep score │  │ AI-coach two-stage  │    │
+│ │ (MediaPipe /│  │ + quality │  │  vision → LLM chain │    │
+│ │  YOLO26)    │  │ (evidence)│  │  (Aliyun Bailian /  │    │
+│ └─────────────┘  └───────────┘  │   Volc Ark / etc.)  │    │
+│                                 └─────────────────────┘    │
+└────────────────────────────────────────────────────────────┘
+                         │ HTTP / WebSocket
+                 ┌───────┴────────┐
+                 │  Android app   │
+                 │  (Kotlin)      │
+                 └────────────────┘
 ```
 
 ## Project Structure
@@ -80,16 +87,11 @@ smart_fitness/
 │   ├── models.py            # Data models
 │   ├── requirements.txt     # Python dependencies
 │   └── Dockerfile           # Container build
-├── edge_device/        # ESP32-S3 Firmware (Arduino/PlatformIO)
-│   ├── platformio.ini       # PlatformIO configuration
-│   ├── include/config.h     # System configuration
-│   └── src/                 # Firmware source code
-│       ├── main.cpp             # Main entry point
-│       ├── camera_utils.h       # OV5640 camera driver
-│       ├── sensor_manager.h     # MAX30102 + MPU-6060 drivers
-│       └── mqtt_manager.h       # MQTT communication
-├── hardware/           # Hardware documentation
-│   └── README.md            # Hardware connection guide
+├── edge_esp32cam/      # ESP32-CAM firmware (Arduino IDE)
+│   ├── esp32cam_fitness/    # Main firmware sketch
+│   ├── camera_probe/        # Camera bring-up sketch
+│   ├── camera_test/         # Standalone camera test
+│   └── FLASH_GUIDE.md       # Flashing instructions
 ├── tests/              # Integration & performance tests
 │   ├── test_integration.py   # End-to-end integration tests
 │   └── test_performance.py   # Performance benchmarks
@@ -106,8 +108,8 @@ smart_fitness/
 
 ### Prerequisites
 - Python 3.10+
-- ESP32-S3-CAM (with OV5640) + sensors
-- PlatformIO (for firmware flashing)
+- ESP32-CAM (AI-Thinker board with OV2640 camera module)
+- Arduino IDE 2.x with the ESP32 core installed (for firmware flashing)
 
 ### 1. AI Vision (Local PC)
 ```bash
@@ -124,11 +126,12 @@ pip install -r requirements.txt
 python main.py                        # Start FastAPI server
 ```
 
-### 3. ESP32 Firmware
-```bash
-cd edge_device
-platformio run --target upload        # Flash firmware
-platformio device monitor             # View serial output
+### 3. ESP32-CAM Firmware
+```
+# Open edge_esp32cam/esp32cam_fitness/esp32cam_fitness.ino in Arduino IDE
+# Board: AI Thinker ESP32-CAM
+# Fill in WiFi SSID / password and the backend URL, then Upload.
+# See edge_esp32cam/FLASH_GUIDE.md for the full walkthrough.
 ```
 
 ### 4. Full Stack with Docker
@@ -175,14 +178,16 @@ docker-compose up -d                   # Backend + MQTT broker
 
 ## Hardware Bill of Materials
 
+The current build only uses one board and its bundled camera module. Everything else runs on the host PC and the Android phone.
+
 | Component | Model | Cost | Interface |
 |-----------|-------|------|-----------|
-| Camera Module | ESP32-S3-CAM-OV5640 | 51.8 CNY | DVP |
-| HR Sensor | MAX30102 | 14.9 CNY | I2C |
-| 6-axis IMU | MPU-6060 (MPU-6050) | 10.4 CNY | I2C |
-| Microphone | MSM261S4030H0R | 35.0 CNY | I2S |
-| Audio Amp+Speaker | MAX98357A+3W speaker | 7.8 CNY | I2S |
-| **Total** | | **~120 CNY** | |
+| Camera Node | AI-Thinker ESP32-CAM (ESP32-S with 4 MB PSRAM) | ~35 CNY | WiFi |
+| Camera Module | OV2640 (bundled with the ESP32-CAM board) | included | DVP |
+| USB-to-Serial Downloader | CH340 / CP2102 programmer | ~10 CNY | USB |
+| **Total** | | **~45 CNY** | |
+
+Other sensors that were sketched in early design drafts (heart-rate MAX30102, MPU-6050 IMU, MSM261 microphone, MAX98357 speaker) are **not part of the current hardware** — pose estimation and rep quality run entirely from the camera stream.
 
 ## Key Open Source Frameworks
 
