@@ -12,7 +12,7 @@
 """
 import os, json, time, uuid, secrets, base64, logging, calendar
 from typing import Optional, Dict, Any
-from fastapi import Request
+from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
 import auth
@@ -405,7 +405,7 @@ async def x_stats_weekly(req: Request):
 # Sessions history
 # ============================================================
 @app.get("/api/v2/sessions/history")
-async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit: int = 50):
+async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit: int = Query(default=50, ge=1, le=200)):
     u = _user(req)
     if not u:
         return _unauth()
