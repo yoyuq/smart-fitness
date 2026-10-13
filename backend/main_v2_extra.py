@@ -1374,13 +1374,12 @@ async def x_stats_streak(req: Request):
         # current streak: 从今天/昨天往回数连续
         current = 0
         expected = today
+        if days[0] == today - timedelta(days=1):
+            expected = days[0]
         for d in days:
             if d == expected:
                 current += 1
                 expected = expected - timedelta(days=1)
-            elif d == expected + timedelta(days=1) and current == 0:
-                # 用户今天还没训练, 但昨天有
-                continue
             else:
                 break
         # longest streak: 全部历史
