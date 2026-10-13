@@ -5,6 +5,7 @@ JWT-based auth with bcrypt password hashing.
 PostgreSQL/SQLite compatible.
 """
 import os, time, json
+import re
 from typing import Optional, Dict, Any
 import sqlite3
 import bcrypt
@@ -24,16 +25,106 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _device_schema_parts(sql):
+    """Split SQLite's stored CREATE TABLE body without splitting quoted defaults."""
+    start = sql.index("(") + 1
+    parts, depth, quote = [], 1, None
+    i = start
+    while i < len(sql):
+        char = sql[i]
+        if quote:
+            if char == quote:
+                if quote != "]" and i + 1 < len(sql) and sql[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+        elif char in "'\"`[":
+            quote = "]" if char == "[" else char
+        elif sql.startswith("--", i):
+            end = sql.find("\n", i + 2)
+            i = len(sql) if end < 0 else end
+            continue
+        elif sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            if end < 0:
+                break
+            i = end + 2
+            continue
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return parts + [sql[start:i].strip()], sql[i + 1:]
+        elif char == "," and depth == 1:
+            parts.append(sql[start:i].strip())
+            start = i + 1
+        i += 1
+    raise sqlite3.OperationalError("Cannot read devices table definition")
+
+
+def _init_devices(conn):
+    # main's legacy SELECT * routes use positions, so these first six columns
+    # must stay in exactly this order. Keep auth's columns after them.
+    required = {
+        "device_id": "device_id TEXT PRIMARY KEY",
+        "name": "name TEXT DEFAULT ''",
+        "firmware_version": "firmware_version TEXT",
+        "last_seen": "last_seen REAL",
+        "wifi_rssi": "wifi_rssi REAL",
+        "status": "status TEXT DEFAULT 'offline'",
+        "device_type": "device_type TEXT NOT NULL DEFAULT 'phone'",
+        "user_id": "user_id INTEGER REFERENCES users(id)",
+        "registered_at": "registered_at REAL DEFAULT (strftime('%s', 'now'))",
+    }
+    original = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='devices'"
+    ).fetchone()
+    if original is None:
+        conn.execute("CREATE TABLE devices (" + ", ".join(required.values()) + ")")
+        return
+    info = list(conn.execute("PRAGMA table_xinfo(devices)"))
+    names = [row[1] for row in info]
+    if names[:6] == list(required)[:6] and required.keys() <= set(names):
+        return
+
+    parts, suffix = _device_schema_parts(original[0])
+    columns, constraints = [], []
+    for part in parts:
+        # Preserve original column declarations, including defaults, CHECKs,
+        # generated columns and any table-level constraints.
+        head = re.sub(r"^(?:\s+|--[^\n]*(?:\n|$)|/\*.*?\*/)*", "", part, flags=re.S)
+        target = constraints if re.match(
+            r"(?:CONSTRAINT\b|PRIMARY\s+KEY\b|UNIQUE\b|CHECK\b|FOREIGN\s+KEY\b)",
+            head, re.I,
+        ) else columns
+        target.append(part)
+    if len(columns) != len(names):
+        raise sqlite3.OperationalError("Cannot safely migrate devices table definition")
+    existing = dict(zip(names, columns))
+    definitions = [existing.get(name, spec) for name, spec in required.items()]
+    definitions.extend(spec for name, spec in existing.items() if name not in required)
+    definitions.extend(constraints)
+    schema_objects = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE tbl_name='devices' "
+        "AND type IN ('index', 'trigger') AND sql IS NOT NULL"
+    ).fetchall()
+    conn.execute("CREATE TABLE devices_bootstrap_new (" + ", ".join(definitions) + ")" + suffix)
+    # Generated columns compute themselves; copy every other existing value by
+    # name. The new timestamp default applies to migrated and future rows alike.
+    copied = ", ".join('"' + row[1].replace('"', '""') + '"' for row in info if row[6] == 0)
+    conn.execute(f"INSERT INTO devices_bootstrap_new ({copied}) SELECT {copied} FROM devices")
+    conn.execute("DROP TABLE devices")
+    conn.execute("ALTER TABLE devices_bootstrap_new RENAME TO devices")
+    for row in schema_objects:
+        conn.execute(row[0])
+
+
 def init_auth_db():
     """Create users + workout_plans + devices + rate_limit tables."""
     conn = _get_conn()
-    # Migrate old devices table if needed
     try:
-        conn.execute("SELECT device_type FROM devices LIMIT 1")
-    except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE devices ADD COLUMN device_type TEXT DEFAULT 'phone'")
-        conn.execute("ALTER TABLE devices ADD COLUMN user_id INTEGER")
-    conn.executescript("""
+        conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -51,14 +142,6 @@ def init_auth_db():
             created_at REAL DEFAULT (julianday('now')),
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
-        CREATE TABLE IF NOT EXISTS devices (
-            device_id TEXT PRIMARY KEY,
-            device_type TEXT NOT NULL DEFAULT 'phone',
-            name TEXT DEFAULT '',
-            user_id INTEGER,
-            last_seen REAL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
         CREATE TABLE IF NOT EXISTS rate_limits (
             ip TEXT NOT NULL,
             endpoint TEXT NOT NULL,
@@ -66,9 +149,16 @@ def init_auth_db():
             window_start REAL NOT NULL,
             PRIMARY KEY (ip, endpoint)
         );
-    """)
-    conn.commit()
-    conn.close()
+        """)
+        # Rebuild atomically when an old schema has incompatible column order.
+        # Do not rename the old table: dependent foreign keys must keep pointing
+        # to devices, and dropping it must not cascade into existing sessions.
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("BEGIN IMMEDIATE")
+        _init_devices(conn)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Password helpers ──

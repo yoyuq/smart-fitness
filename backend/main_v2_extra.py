@@ -12,7 +12,7 @@
 """
 import os, json, time, uuid, secrets, base64, logging, calendar
 from typing import Optional, Dict, Any
-from fastapi import Request
+from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
 import auth
@@ -405,7 +405,7 @@ async def x_stats_weekly(req: Request):
 # Sessions history
 # ============================================================
 @app.get("/api/v2/sessions/history")
-async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit: int = 50):
+async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit: int = Query(default=50, ge=1, le=200)):
     u = _user(req)
     if not u:
         return _unauth()
@@ -1374,13 +1374,12 @@ async def x_stats_streak(req: Request):
         # current streak: 从今天/昨天往回数连续
         current = 0
         expected = today
+        if days[0] == today - timedelta(days=1):
+            expected = days[0]
         for d in days:
             if d == expected:
                 current += 1
                 expected = expected - timedelta(days=1)
-            elif d == expected + timedelta(days=1) and current == 0:
-                # 用户今天还没训练, 但昨天有
-                continue
             else:
                 break
         # longest streak: 全部历史
@@ -1454,12 +1453,11 @@ async def x_achievements(req: Request):
 # Export CSV (用户数据导出)
 # ============================================================
 @app.get("/api/v2/export/csv")
-async def x_export_csv(req: Request):
+async def x_export_csv(req: Request, days: int = Query(365, ge=1, le=3650)):
     """导出 exercise_log 所有数据为 CSV."""
     u = _user(req)
     if not u:
         return _unauth()
-    days = int(req.query_params.get("days") or 365)
     cutoff = int(time.time()) - days * 86400
     c = _db()
     try:
@@ -1480,7 +1478,7 @@ async def x_export_csv(req: Request):
     w.writerow(["log_id","exercise_type","reps","duration_s","avg_form_score","device_id","created_at","timestamp"])
     for r in rows:
         w.writerow([r["log_id"], r["exercise_type"] or "", r["reps"] or 0,
-                    r["duration_s"] or 0, r["avg_form_score"] or "",
+                    r["duration_s"] or 0, r["avg_form_score"] if r["avg_form_score"] is not None else "",
                     r["device_id"] or "", r["created_at"], r["ts_local"]])
 
     from fastapi.responses import Response
