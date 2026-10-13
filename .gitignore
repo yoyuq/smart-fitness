@@ -41,6 +41,7 @@ backend/_bench*.py
 
 # Temp scripts and files
 _*.py
+!__init__.py
 _*.ps1
 _*.json
 _*.txt

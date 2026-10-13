@@ -27,13 +27,8 @@ def _get_conn() -> sqlite3.Connection:
 def init_auth_db():
     """Create users + workout_plans + devices + rate_limit tables."""
     conn = _get_conn()
-    # Migrate old devices table if needed
     try:
-        conn.execute("SELECT device_type FROM devices LIMIT 1")
-    except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE devices ADD COLUMN device_type TEXT DEFAULT 'phone'")
-        conn.execute("ALTER TABLE devices ADD COLUMN user_id INTEGER")
-    conn.executescript("""
+        conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -66,9 +61,16 @@ def init_auth_db():
             window_start REAL NOT NULL,
             PRIMARY KEY (ip, endpoint)
         );
-    """)
-    conn.commit()
-    conn.close()
+        """)
+        # Existing installations may have either, both, or neither auth column.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(devices)")}
+        if "device_type" not in columns:
+            conn.execute("ALTER TABLE devices ADD COLUMN device_type TEXT DEFAULT 'phone'")
+        if "user_id" not in columns:
+            conn.execute("ALTER TABLE devices ADD COLUMN user_id INTEGER")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Password helpers ──
