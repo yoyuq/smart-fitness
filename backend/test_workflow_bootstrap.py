@@ -169,6 +169,82 @@ class AuthBootstrapTests(unittest.TestCase):
                 with self.assertRaises(sqlite3.ProgrammingError):
                     conn.execute("SELECT 1")
 
+    def test_migration_keeps_extra_values_constraints_and_dependents(self):
+        self.auth.init_auth_db()
+        conn = sqlite3.connect(self.db)
+        self.addCleanup(conn.close)
+        conn.executescript("""
+            DROP TABLE devices;
+            INSERT INTO users (id, username, password_hash) VALUES (41, 'saved', 'synthetic');
+            CREATE TABLE devices (
+                device_id TEXT PRIMARY KEY, device_type TEXT DEFAULT 'phone',
+                name TEXT, user_id INTEGER, last_seen REAL,
+                token TEXT UNIQUE, note TEXT DEFAULT 'a, ''quoted'' (note)',
+                CHECK (length(note) > 0),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            INSERT INTO devices (device_id, device_type, name, user_id, last_seen, token)
+                VALUES ('saved', 'esp32', 'old name', 41, 12, 'saved-token');
+            CREATE INDEX devices_owner ON devices(user_id);
+            CREATE TABLE device_audit (device_id TEXT, name TEXT);
+            CREATE TRIGGER devices_audit AFTER UPDATE OF name ON devices BEGIN
+                INSERT INTO device_audit VALUES (NEW.device_id, NEW.name);
+            END;
+            CREATE TABLE device_children (device_id TEXT REFERENCES devices(device_id) ON DELETE CASCADE);
+            INSERT INTO device_children VALUES ('saved');
+        """)
+        objects = conn.execute("SELECT name, sql FROM sqlite_master WHERE tbl_name='devices' "
+                               "AND type IN ('index', 'trigger') ORDER BY name").fetchall()
+        foreign_keys = conn.execute("PRAGMA foreign_key_list(devices)").fetchall()
+        original_fields = "device_id, device_type, name, user_id, last_seen, token, note"
+        original = conn.execute("SELECT " + original_fields + " FROM devices").fetchall()
+        migrating = self.auth._get_conn()
+        migrating.execute("PRAGMA foreign_keys=ON")
+        with mock.patch.object(self.auth, "_get_conn", return_value=migrating):
+            self.auth.init_auth_db()
+        self.initialize_and_assert_closed()
+        self.assertEqual(conn.execute("SELECT " + original_fields + " FROM devices").fetchall(), original)
+        self.assertEqual(conn.execute("SELECT * FROM device_children").fetchall(), [("saved",)])
+        self.assertEqual(conn.execute("PRAGMA foreign_key_list(devices)").fetchall(), foreign_keys)
+        self.assertEqual(conn.execute("SELECT name, sql FROM sqlite_master WHERE tbl_name='devices' "
+                                      "AND type IN ('index', 'trigger') ORDER BY name").fetchall(), objects)
+        conn.execute("UPDATE devices SET name='updated' WHERE device_id='saved'")
+        self.assertEqual(conn.execute("SELECT * FROM device_audit").fetchall(), [("saved", "updated")])
+        conn.execute("INSERT INTO devices (device_id) VALUES ('new')")
+        self.assertEqual(conn.execute("SELECT note FROM devices WHERE device_id='new'").fetchone(),
+                         ("a, 'quoted' (note)",))
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO devices (device_id, token) VALUES ('duplicate', 'saved-token')")
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO devices (device_id, note) VALUES ('invalid', '')")
+
+    def test_failed_rebuild_rolls_back_original_table_and_rows(self):
+        self.auth.init_auth_db()
+        conn = sqlite3.connect(self.db)
+        self.addCleanup(conn.close)
+        conn.executescript("""
+            DROP TABLE devices;
+            CREATE TABLE devices (device_id TEXT PRIMARY KEY, name TEXT, user_id INTEGER);
+            CREATE INDEX saved_owner ON devices(user_id);
+            INSERT INTO devices VALUES ('saved', 'saved name', 41);
+        """)
+        before = conn.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
+
+        class FailingRename(sqlite3.Connection):
+            def execute(self, sql, *args):
+                if sql.startswith("ALTER TABLE devices_bootstrap_new"):
+                    raise sqlite3.OperationalError("synthetic rename failure")
+                return super().execute(sql, *args)
+
+        migrating = sqlite3.connect(self.db, factory=FailingRename)
+        with mock.patch.object(self.auth, "_get_conn", return_value=migrating):
+            with self.assertRaisesRegex(sqlite3.OperationalError, "synthetic rename failure"):
+                self.auth.init_auth_db()
+        with self.assertRaises(sqlite3.ProgrammingError):
+            migrating.execute("SELECT 1")
+        self.assertEqual(conn.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall(), before)
+        self.assertEqual(conn.execute("SELECT * FROM devices").fetchall(), [("saved", "saved name", 41)])
+
 
 def _route_smoke():
     """Run only in a child process so imported app globals cannot leak to other tests."""
@@ -238,8 +314,146 @@ class RouteBootstrapTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+def _shared_database_checks(order):
+    """Exercise each startup order in its own interpreter and one real database."""
+    from fastapi.testclient import TestClient
+    import auth
+    import mqtt_client
+    import requests
+
+    check = unittest.TestCase()
+    real_connect = sqlite3.connect
+    with tempfile.TemporaryDirectory(prefix="fitness-shared-bootstrap-") as temp:
+        db = str(Path(temp) / "shared.db")
+        if order == "legacy-auth":
+            conn = real_connect(db)
+            try:
+                conn.execute("""CREATE TABLE devices (
+                    device_id TEXT PRIMARY KEY,
+                    device_type TEXT NOT NULL DEFAULT 'phone',
+                    name TEXT DEFAULT '', user_id INTEGER, last_seen REAL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )""")
+                conn.execute("INSERT INTO devices VALUES (?, ?, ?, ?, ?)",
+                             ("saved-device", "esp32", "saved name", 730002, 12.0))
+                conn.commit()
+            finally:
+                conn.close()
+
+        def isolated_connect(database, *args, **kwargs):
+            # main initializes before its DB_PATH can be assigned. Redirect
+            # import-time connections from every module to this same file too.
+            return real_connect(db, *args, **kwargs)
+
+        with mock.patch.object(sqlite3, "connect", side_effect=isolated_connect), \
+             mock.patch.object(auth, "DB_PATH", db), \
+             mock.patch.object(requests.sessions.Session, "request",
+                               side_effect=AssertionError("HTTP network disabled")) as http, \
+             mock.patch.object(mqtt_client.MQTTClientHandler, "connect",
+                               side_effect=AssertionError("MQTT disabled")) as mqtt_connect:
+            if order in ("auth-main", "legacy-auth"):
+                auth.init_auth_db()
+            main = importlib.import_module("main")
+            main.DB_PATH = db
+            check.assertEqual(auth.DB_PATH, main.DB_PATH)
+            check.assertIn("main_v2_routes", sys.modules)
+            check.assertIn("main_v2_extra", sys.modules)
+            import ai_planner
+
+            conn = real_connect(db)
+            # Do not enter TestClient: its lifespan starts hardware/model hooks.
+            client = TestClient(main.app, raise_server_exceptions=False)
+            try:
+                columns = [row[1] for row in conn.execute("PRAGMA table_info(devices)")]
+                check.assertEqual(columns[:6], ["device_id", "name", "firmware_version",
+                                                "last_seen", "wifi_rssi", "status"])
+                check.assertTrue({"device_type", "user_id", "registered_at"} <= set(columns))
+                schema = conn.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall()
+                before = conn.execute("SELECT * FROM devices ORDER BY device_id").fetchall()
+                for _ in range(2):
+                    auth.init_auth_db()
+                    main.init_db()
+                check.assertEqual(conn.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall(),
+                                  schema)
+                check.assertEqual(conn.execute("SELECT * FROM devices ORDER BY device_id").fetchall(),
+                                  before)
+                if order == "legacy-auth":
+                    check.assertEqual(conn.execute(
+                        "SELECT device_id, device_type, name, user_id, last_seen FROM devices"
+                    ).fetchall(), [("saved-device", "esp32", "saved name", 730002, 12.0)])
+
+                with mock.patch.object(ai_planner, "_call_llm",
+                                       side_effect=AssertionError("LLM disabled")) as llm:
+                    for device_id, payload, name, firmware in (
+                        ("registered-device", {"name": "真实设备", "firmware_version": "test-v1"},
+                         "真实设备", "test-v1"),
+                        ("default-device", {}, "default-device", "unknown"),
+                    ):
+                        response = client.post("/api/devices/register", json={
+                            "device_id": device_id, **payload,
+                        })
+                        check.assertEqual(response.status_code, 200, response.text)
+                        check.assertEqual(response.json(), {"status": "registered", "device_id": device_id})
+                        row = conn.execute(
+                            "SELECT name, firmware_version, status, registered_at, last_seen, "
+                            "device_type FROM devices WHERE device_id=?", (device_id,),
+                        ).fetchone()
+                        check.assertEqual(row[:3], (name, firmware, "online"))
+                        check.assertIsInstance(row[3], (int, float))
+                        check.assertGreater(row[3], 0)
+                        check.assertAlmostEqual(row[3], row[4], delta=5)
+                        check.assertEqual(row[5], "phone")
+                    check.assertTrue(auth.register_device("auth-device", "phone", "auth name")["ok"])
+                    listing = client.get("/api/devices")
+                    check.assertEqual(listing.status_code, 200, listing.text)
+                    fields = ("device_id", "name", "firmware_version", "last_seen", "wifi_rssi", "status")
+                    expected = [dict(zip(fields, row)) for row in conn.execute(
+                        "SELECT " + ", ".join(fields) + " FROM devices ORDER BY last_seen DESC"
+                    )]
+                    check.assertEqual(listing.json(), expected)
+                    if order == "legacy-auth":
+                        check.assertEqual(next(row for row in listing.json()
+                                               if row["device_id"] == "saved-device"), {
+                            "device_id": "saved-device", "name": "saved name", "firmware_version": None,
+                            "last_seen": 12.0, "wifi_rssi": None, "status": "offline",
+                        })
+                    saved = conn.execute("SELECT * FROM devices ORDER BY device_id").fetchall()
+                    main.init_db()
+                    auth.init_auth_db()
+                    check.assertEqual(conn.execute("SELECT * FROM devices ORDER BY device_id").fetchall(),
+                                      saved)
+                    llm.assert_not_called()
+                mqtt_connect.assert_not_called()
+                http.assert_not_called()
+            finally:
+                client.close()
+                conn.close()
+
+
+class SharedDatabaseBootstrapTests(unittest.TestCase):
+    def check_order(self, order):
+        result = subprocess.run(
+            [sys.executable, "-X", "utf8", "-B", str(Path(__file__).resolve()), "--shared-db", order],
+            cwd=BACKEND,
+            env=dict(os.environ, AI_AGENT_MCP_SERVERS_JSON="[]", PYTHONDONTWRITEBYTECODE="1"),
+            capture_output=True, text=True, encoding="utf-8", timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_auth_then_main_share_database(self):
+        self.check_order("auth-main")
+
+    def test_main_then_auth_share_database(self):
+        self.check_order("main-auth")
+
+    def test_legacy_auth_table_shares_database(self):
+        self.check_order("legacy-auth")
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["--route-smoke"]:
         _route_smoke()
+    elif len(sys.argv) == 3 and sys.argv[1] == "--shared-db":
+        _shared_database_checks(sys.argv[2])
     else:
         unittest.main(verbosity=2)
