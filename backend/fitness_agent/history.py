@@ -117,6 +117,27 @@ def get_agent_chat_history(
     return out
 
 
+def prune_agent_chat_history(
+    conn: sqlite3.Connection, user_id: int, keep_last: int = 200,
+) -> int:
+    """Keep this user's newest IDs, commit, and return the deleted row count."""
+    if isinstance(keep_last, bool) or not isinstance(keep_last, int) or not 0 <= keep_last <= 10000:
+        raise ValueError("keep_last must be an integer between 0 and 10000")
+    ensure_agent_chat_schema(conn)
+    cur = conn.execute(
+        """
+        DELETE FROM agent_chat_messages
+        WHERE user_id=? AND id IN (
+            SELECT id FROM agent_chat_messages
+            WHERE user_id=? ORDER BY id DESC LIMIT -1 OFFSET ?
+        )
+        """,
+        (user_id, user_id, keep_last),
+    )
+    conn.commit()
+    return int(cur.rowcount or 0)
+
+
 def delete_agent_chat_history(conn: sqlite3.Connection, user_id: int) -> int:
     ensure_agent_chat_schema(conn)
     cur = conn.execute("DELETE FROM agent_chat_messages WHERE user_id=?", (user_id,))
