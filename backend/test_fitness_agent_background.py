@@ -1,5 +1,6 @@
 import os, sys, time, uuid
 import sqlite3
+from storage.database import connect as connect_database
 from fastapi.testclient import TestClient
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +23,7 @@ def _headers(user_id=None):
 
 
 def _conn():
-    c = sqlite3.connect(main_v2_extra.DB_PATH)
+    c = connect_database(main_v2_extra.DB_PATH)
     c.row_factory = sqlite3.Row
     return c
 

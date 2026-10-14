@@ -8,6 +8,7 @@ Usage example:
 This is intentionally stdio-only and user-scoped. Write tools still execute as
 raw tools here, so only run this server in trusted local MCP clients.
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import contextlib
 import json
 import os
@@ -36,12 +37,12 @@ sys.stdout = _REAL_STDOUT
 
 
 def _default_db_path() -> str:
-    return str(Path(__file__).resolve().parents[1] / "fitness.db")
+    return default_sqlite_path()
 
 
 def _open_conn() -> sqlite3.Connection:
     db_path = os.environ.get("SMART_FITNESS_MCP_DB") or _default_db_path()
-    conn = sqlite3.connect(db_path, timeout=10)
+    conn = connect_database(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 

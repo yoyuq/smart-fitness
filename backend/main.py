@@ -12,6 +12,7 @@ Provides:
   - Pose data processing and storage
   - WebSocket for live client updates
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source, initialize
 
 import asyncio
 import json
@@ -99,11 +100,12 @@ if os.path.isdir(_STATIC_DIR):
 
 # ---------- Database Setup ----------
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "fitness.db")
+DB_PATH = default_sqlite_path()
 
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    initialize(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS devices (
@@ -337,7 +339,7 @@ async def health():
 
 
 def get_active_device_count() -> int:
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM devices WHERE status='online' AND last_seen > ?",
               (time.time() - 120,))
@@ -350,11 +352,11 @@ def get_active_device_count() -> int:
 
 @app.post("/api/devices/register")
 async def register_device(device: DeviceRegister):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "INSERT OR REPLACE INTO devices (device_id, name, firmware_version, last_seen, status) "
-        "VALUES (?, ?, ?, ?, 'online')",
+        "INSERT INTO devices (device_id, name, firmware_version, last_seen, status) "
+        "VALUES (?, ?, ?, ?, 'online') ON CONFLICT(device_id) DO UPDATE SET name=excluded.name, firmware_version=excluded.firmware_version, last_seen=excluded.last_seen, status=excluded.status",
         (device.device_id, device.name or device.device_id,
          device.firmware_version or "unknown", time.time())
     )
@@ -365,7 +367,7 @@ async def register_device(device: DeviceRegister):
 
 @app.get("/api/devices")
 async def list_devices():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM devices ORDER BY last_seen DESC")
     rows = c.fetchall()
@@ -385,7 +387,7 @@ async def list_devices():
 
 @app.get("/api/devices/{device_id}")
 async def get_device(device_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM devices WHERE device_id=?", (device_id,))
     row = c.fetchone()
@@ -407,7 +409,7 @@ async def get_device(device_id: str):
 @app.post("/api/sessions/start")
 async def start_session(session: SessionStart):
     session_id = str(uuid.uuid4())
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO sessions (session_id, device_id, user_id, exercise_type, start_time, status) "
@@ -422,7 +424,7 @@ async def start_session(session: SessionStart):
 
 @app.post("/api/sessions/{session_id}/end")
 async def end_session(session_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "UPDATE sessions SET end_time=?, status='completed' WHERE session_id=?",
@@ -438,7 +440,7 @@ async def end_session(session_id: str):
 
 @app.get("/api/sessions")
 async def list_sessions(limit: int = Query(20, ge=1, le=100)):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM sessions ORDER BY start_time DESC LIMIT ?", (limit,))
     rows = c.fetchall()
@@ -461,7 +463,7 @@ async def list_sessions(limit: int = Query(20, ge=1, le=100)):
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,))
     row = c.fetchone()
@@ -485,7 +487,7 @@ async def get_session(session_id: str):
 
 @app.post("/api/sessions/{session_id}/pose")
 async def submit_pose_data(session_id: str, frame: PoseFrame):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO pose_data (session_id, timestamp, exercise_type, rep_count, form_score, angles_json) "
@@ -511,7 +513,7 @@ async def submit_pose_data(session_id: str, frame: PoseFrame):
 
 @app.post("/api/sessions/{session_id}/sensor")
 async def submit_sensor_data(session_id: str, reading: SensorReading):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO sensor_data (session_id, timestamp, heart_rate, hr_confidence, "
@@ -528,7 +530,7 @@ async def submit_sensor_data(session_id: str, reading: SensorReading):
 
 @app.post("/api/sessions/{session_id}/feedback")
 async def submit_feedback(session_id: str, feedback: FeedbackMessage):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO feedback_log (session_id, timestamp, severity, message) "
@@ -552,7 +554,7 @@ async def submit_feedback(session_id: str, feedback: FeedbackMessage):
 
 @app.get("/api/sessions/{session_id}/analytics")
 async def get_session_analytics(session_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
 
     c.execute("SELECT avg(form_score), count(*) FROM pose_data WHERE session_id=?",

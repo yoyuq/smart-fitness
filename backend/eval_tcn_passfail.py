@@ -5,13 +5,14 @@
 诚实呈现: 准确率 / 多数类基线 / 抓"不合格"的召回 / 混淆矩阵。
 产物: datasets/models/tcn_eval.json (供监控台展示) + 一张评估图。
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import os, sys, json, sqlite3
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ml_pose"))
 from poc_skeleton_model import build_tcn  # 复用同一 TCN 结构
 
-DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fitness.db")
+DB = default_sqlite_path()
 OUT_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "datasets", "models", "tcn_eval.json")
 OUT_FIG = r"C:\Users\hjl\Desktop\TCN_合格判定_准确率评估.png"
 CHANNELS = ["primary", "torso", "lr_diff", "shoulder"]
@@ -20,7 +21,7 @@ SERIES = 32
 
 
 def load():
-    c = sqlite3.connect(DB); c.row_factory = sqlite3.Row
+    c = connect_database(DB); c.row_factory = sqlite3.Row
     rows = c.execute("SELECT r.exercise ex, r.angle_series s, a.ai_score ai "
                      "FROM rep_scores r JOIN ai_reviews a ON a.rep_id=r.id "
                      "WHERE a.ai_score IS NOT NULL AND r.angle_series IS NOT NULL").fetchall()
