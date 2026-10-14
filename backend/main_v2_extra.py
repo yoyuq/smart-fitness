@@ -363,7 +363,7 @@ def _stats_summary(user_id: int, since_ts: float):
             "SELECT s.session_id, s.exercise_type, s.start_time, s.end_time, "
             "       s.total_reps, s.avg_form_score, s.status, s.device_id "
             "FROM sessions s "
-            "WHERE s.user_id=? AND s.start_time>=? ORDER BY s.start_time DESC LIMIT 20",
+            "WHERE s.user_id=CAST(? AS TEXT) AND s.start_time>=? ORDER BY s.start_time DESC LIMIT 20",
             (str(user_id), since_ts)
         ).fetchall()
         sess_list = [dict(r) for r in sess_rows]
@@ -416,7 +416,7 @@ async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit:
         rows = c.execute(
             "SELECT session_id, device_id, user_id, exercise_type, start_time, end_time, "
             "       total_reps, avg_form_score, status "
-            "FROM sessions WHERE user_id=? ORDER BY start_time DESC LIMIT ?",
+            "FROM sessions WHERE user_id=CAST(? AS TEXT) ORDER BY start_time DESC LIMIT ?",
             (str(target_uid), limit)
         ).fetchall()
         return JSONResponse({"sessions": [dict(r) for r in rows]})
@@ -563,7 +563,7 @@ async def x_training_data(req: Request, period: str = "week"):
         ).fetchall()
         sess_rows = c.execute(
             "SELECT session_id, device_id, exercise_type, start_time, end_time, total_reps, avg_form_score, status "
-            "FROM sessions WHERE user_id=? AND start_time>=? ORDER BY start_time DESC LIMIT 80",
+            "FROM sessions WHERE user_id=CAST(? AS TEXT) AND start_time>=? ORDER BY start_time DESC LIMIT 80",
             (str(u["user_id"]), since)
         ).fetchall()
         sessions = []
@@ -631,7 +631,7 @@ async def x_training_rep_images(rep_id: int, req: Request):
             "       r.peak_angle, r.duration_s, r.feedback, r.ts, r.true_label, r.error_type, "
             "       r.start_frame, r.peak_frame, r.end_frame, r.clip_dir "
             "FROM rep_scores r JOIN sessions s ON s.session_id=r.session_id "
-            "WHERE r.id=? AND s.user_id=?",
+            "WHERE r.id=? AND s.user_id=CAST(? AS TEXT)",
             (rep_id, str(u["user_id"]))
         ).fetchone()
         if not row:

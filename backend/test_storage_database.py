@@ -40,6 +40,11 @@ def test_auth_device_plans_scores_and_transactions():
     conn.commit()
     count=conn.execute('SELECT COUNT(*) FROM rep_scores WHERE session_id=?',(sid,)).fetchone()[0]
     assert count==1
+    conn.execute('INSERT INTO exercise_log(user_id,exercise_type,reps,created_at) VALUES (?,?,?,?)',(uid,'squat',1,123))
+    conn.commit()
+    from fitness_agent.tools import execute_tool
+    assert execute_tool(conn,uid,'get_recent_workouts',{'days':365000,'limit':5})['ok']
+    assert execute_tool(conn,uid,'get_recent_workouts',{'days':365000,'limit':5,'exercise':'squat'})['ok']
     conn.execute('INSERT INTO rep_scores(session_id,rep_index,total) VALUES (?,?,?)',(sid,2,40))
     conn.rollback()
     assert conn.execute('SELECT COUNT(*) FROM rep_scores WHERE session_id=?',(sid,)).fetchone()[0]==count

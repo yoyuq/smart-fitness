@@ -171,10 +171,6 @@ class Connection:
         bound, args = bind_qmarks(sql, parameters)
         if ':calendar_tz' in bound:
             args['calendar_tz'] = os.getenv('APP_TIMEZONE', 'Asia/Shanghai')
-        # sessions.user_id is historically TEXT; other user IDs are INTEGER.
-        if re.search(r'\bFROM sessions\b', bound, re.I) or re.search(r'\bJOIN sessions\s+s\b', bound, re.I):
-            pattern = r'((?:s\.)?user_id\s*=\s*)(:p\d+)'
-            bound = re.sub(pattern, r'\1CAST(\2 AS TEXT)', bound)
         inserted = re.match(r'\s*INSERT INTO\s+(\w+)\s*\(', bound, re.I)
         pk = None
         if inserted and inserted[1] in SPEC and SPEC[inserted[1]]['autoincrement'] and not re.search(r'\bRETURNING\b', bound, re.I):

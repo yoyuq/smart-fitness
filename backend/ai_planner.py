@@ -771,7 +771,7 @@ def workout_report(conn, user_id, session_id):
     # 本次 session 基本信息
     srow = conn.execute(
         "SELECT exercise_type, total_reps, avg_form_score, start_time, end_time "
-        "FROM sessions WHERE session_id=? AND user_id=?",
+        "FROM sessions WHERE session_id=? AND user_id=CAST(? AS TEXT)",
         (session_id, str(user_id))).fetchone()
     if not srow:
         srow = conn.execute(

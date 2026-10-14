@@ -223,7 +223,7 @@ def get_last_training_analysis(conn, user_id: int, args: Dict[str, Any]) -> Dict
 
     q = (
         "SELECT session_id, exercise_type, start_time, end_time, total_reps, avg_form_score "
-        "FROM sessions WHERE user_id=? AND start_time>=?"
+        "FROM sessions WHERE user_id=CAST(? AS TEXT) AND start_time>=?"
     )
     params: List[Any] = [str(user_id), since]
     if exercise:

@@ -220,7 +220,7 @@ def _load_recent_reps(conn, user_id: int, session_id: str, exercise: str, this_r
         rows = conn.execute(
             "SELECT rs.rep_index, rs.session_id, rs.total, rs.depth, rs.control, rs.symmetry, rs.peak_angle, rs.duration_s, rs.feedback "
             "FROM rep_scores rs JOIN sessions s ON rs.session_id=s.session_id "
-            "WHERE s.user_id=? AND rs.exercise=? AND rs.session_id!=? "
+            "WHERE s.user_id=CAST(? AS TEXT) AND rs.exercise=? AND rs.session_id!=? "
             "ORDER BY s.start_time DESC LIMIT 20",
             (str(user_id), exercise, session_id),
         ).fetchall()
