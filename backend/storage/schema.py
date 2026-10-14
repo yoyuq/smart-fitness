@@ -8,11 +8,17 @@ from pathlib import Path
 import sqlalchemy as sa
 
 SPEC = json.loads(Path(__file__).with_name('schema_v1.json').read_text(encoding='utf-8'))
+EXTRA_REP_COLUMNS = [('landmarks','TEXT'),('model_quality','REAL'),('evidence_score','REAL'),('evidence_deficits','TEXT'),('evidence_used','TEXT')]
+
+def current_spec():
+    spec=json.loads(json.dumps(SPEC))
+    spec['rep_scores']['columns'].extend(dict(name=name,type=typ,nullable=True,default=None,pk=0) for name,typ in EXTRA_REP_COLUMNS)
+    return spec
 
 
-def metadata(dialect='postgresql'):
+def metadata(dialect='postgresql', version=1):
     meta = sa.MetaData()
-    for name, spec in SPEC.items():
+    for name, spec in (SPEC if version==1 else current_spec()).items():
         columns = []
         for c in spec['columns']:
             typ = sa.Integer if c['type'] == 'INTEGER' else sa.Double if c['type'] == 'REAL' else sa.Text
@@ -36,12 +42,12 @@ def metadata(dialect='postgresql'):
 
 
 def initialize_sqlite(engine):
-    meta = metadata('sqlite')
+    meta = metadata('sqlite', version=2)
     with engine.begin() as conn:
         # SQLite serializes DDL across processes before any check/create race.
         conn.exec_driver_sql('BEGIN IMMEDIATE')
         meta.create_all(conn)
-        for name, spec in SPEC.items():
+        for name, spec in current_spec().items():
             have = {c['name'] for c in sa.inspect(conn).get_columns(name)}
             for col in spec['columns']:
                 if col['name'] not in have:

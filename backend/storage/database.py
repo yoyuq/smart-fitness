@@ -59,7 +59,9 @@ def initialize(source=None):
     else:
         # Deployment owns DDL. Request paths never auto-upgrade PostgreSQL.
         with engine.connect() as conn:
-            if conn.exec_driver_sql('SELECT version_num FROM alembic_version').scalar() != 'storage_0001':
+            from alembic.script import ScriptDirectory
+            expected=ScriptDirectory(str(Path(__file__).with_name('migrations'))).get_current_head()
+            if conn.exec_driver_sql('SELECT version_num FROM alembic_version').scalar() != expected:
                 raise RuntimeError('Run python -m storage upgrade before starting the backend')
 
 
