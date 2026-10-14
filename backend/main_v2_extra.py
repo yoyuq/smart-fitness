@@ -42,35 +42,9 @@ def _unauth():
     return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
 
-def _rep_image_urls(row: Dict[str, Any], include_frames: bool = True) -> Dict[str, Any]:
-    """Build public /repdata URLs for one rep's saved keyframes/clip frames."""
-    keyframes = []
-    for key in ("start_frame", "peak_frame", "end_frame"):
-        v = row.get(key)
-        if not v:
-            continue
-        p = str(v).replace("\\", "/")
-        idx = p.find("data/")
-        keyframes.append("/repdata/" + p[idx + 5:] if idx >= 0 else p)
-
-    frames = []
-    frame_count = 0
-    clip_dir = row.get("clip_dir")
-    if clip_dir:
-        p = str(clip_dir).replace("\\", "/")
-        idx = p.find("data/")
-        if idx >= 0:
-            sub = p[idx + 5:]
-            d = os.path.join(ROOT, p[idx:])
-        else:
-            sub = p
-            d = os.path.join(ROOT, p)
-        if os.path.isdir(d):
-            names = [fn for fn in sorted(os.listdir(d)) if fn.lower().endswith((".jpg", ".jpeg", ".png"))]
-            frame_count = len(names)
-            if include_frames:
-                frames = [f"/repdata/{sub}/{fn}" for fn in names]
-    return {"keyframes": keyframes, "frames": frames, "frame_count": frame_count, "has_images": bool(keyframes or frame_count)}
+def _rep_image_urls(row: Dict[str, Any], user_id: int, include_frames: bool = True, conn=None) -> Dict[str, Any]:
+    from storage.media import rep_urls
+    return rep_urls(row,user_id,include_frames,conn)
 
 
 def _period_since(period: str) -> float:
@@ -578,7 +552,7 @@ async def x_training_data(req: Request, period: str = "week"):
             reps = []
             for rr in rep_rows:
                 rd = dict(rr)
-                images = _rep_image_urls(rd, include_frames=False)
+                images = _rep_image_urls(rd, u["user_id"], include_frames=False, conn=c)
                 reps.append({
                     "id": rd.get("id"),
                     "rep_index": rd.get("rep_index"),
@@ -637,7 +611,7 @@ async def x_training_rep_images(rep_id: int, req: Request):
         if not row:
             return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
         d = dict(row)
-        images = _rep_image_urls(d, include_frames=True)
+        images = _rep_image_urls(d, u["user_id"], include_frames=True, conn=c)
         rep = {k: d.get(k) for k in ("id", "session_id", "rep_index", "exercise", "total", "depth", "control", "symmetry", "peak_angle", "duration_s", "feedback", "ts", "true_label", "error_type")}
         return JSONResponse({"ok": True, "rep": rep, **images})
     finally:

@@ -131,7 +131,7 @@ def import_sqlite(sources, target_url, *, allow_legacy_orphans=False, batch_size
     if orphan_count and not allow_legacy_orphans:
         raise ValueError('Existing orphan relationships detected; inspect classify report before explicit preservation')
     engine=sa.create_engine(target_url,hide_parameters=True)
-    meta=metadata(engine.dialect.name,version=2)
+    meta=metadata(engine.dialect.name,version=3)
     try:
         with engine.begin() as conn:
             actual=set(sa.inspect(conn).get_table_names())
@@ -179,7 +179,7 @@ def export_recovery(source_url, destination):
     destination.parent.mkdir(parents=True,exist_ok=True)
     source=sa.create_engine(source_url,hide_parameters=True)
     target=sa.create_engine('sqlite:///'+destination.as_posix())
-    meta=metadata('sqlite',version=2)
+    meta=metadata('sqlite',version=3)
     report={'tables':{}}
     try:
         initialize_sqlite(target)

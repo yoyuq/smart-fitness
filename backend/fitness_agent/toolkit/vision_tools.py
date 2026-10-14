@@ -43,19 +43,13 @@ def _resolve_rep_image(conn, user_id: int, rep_id: int) -> Dict[str, Any]:
     frame = row_dict.get("peak_frame") or row_dict.get("start_frame") or row_dict.get("end_frame")
     if not frame:
         return {"ok": False, "error": "rep has no stored frame"}
-    # DB stores paths relative to backend/ (e.g. 'data\rep_frames\...'); resolve
-    # to absolute so whitelist ownership check works from any CWD.
-    backend_dir = os.path.abspath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
-    )
-    if not os.path.isabs(frame):
-        frame_abs = os.path.abspath(os.path.join(backend_dir, frame))
-    else:
-        frame_abs = os.path.abspath(frame)
-    clip_dir = row_dict.get("clip_dir")
-    clip_dir_abs = None
-    if clip_dir:
-        clip_dir_abs = clip_dir if os.path.isabs(clip_dir) else os.path.abspath(os.path.join(backend_dir, clip_dir))
+    from storage.media import MediaService
+    service=MediaService()
+    try:
+        frame_abs=str(_materialized_frame(conn,user_id,frame))
+        clip_dir_abs=_materialized_clip(conn,user_id,row_dict.get('clip_dir'))
+    except (PermissionError,ValueError,FileNotFoundError):
+        return {"ok":False,"error":"stored rep media unavailable"}
     # Parse angle_series once so callers don't have to touch the raw column
     angle_series = None
     raw_series = row_dict.get("angle_series")
@@ -151,8 +145,10 @@ def _load_evidence_for_exercise(exercise: Optional[str]) -> List[Dict[str, Any]]
 def _load_user_context(conn, user_id: int) -> Dict[str, Any]:
     ctx: Dict[str, Any] = {"user_id": user_id}
     try:
+        current=_table_exists(conn,'user_body_metrics')
+        query="SELECT weight_kg,height_cm,body_fat_pct AS body_fat FROM user_body_metrics WHERE user_id=? ORDER BY timestamp DESC LIMIT 1" if current else "SELECT weight_kg,height_cm,body_fat FROM body_metrics WHERE user_id=? ORDER BY ts DESC LIMIT 1"
         row = conn.execute(
-            "SELECT weight_kg, height_cm, body_fat FROM body_metrics WHERE user_id=? ORDER BY ts DESC LIMIT 1",
+            query,
             (user_id,),
         ).fetchone()
         if row:
@@ -328,6 +324,8 @@ def vision_providers_status_tool(conn, user_id: int, args: Dict[str, Any]) -> Di
 
 def _resolve_session_reps(conn, user_id: int, session_id: str, limit: int = 30) -> Dict[str, Any]:
     """Load all reps for a session with image paths and rule summaries."""
+    owner=conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(session_id,)).fetchone()
+    if not owner or str(owner[0])!=str(user_id):return {'ok':False,'error':'session does not belong to current user'}
     if not _table_exists(conn, 'rep_scores'):
         return {'ok': False, 'error': 'rep_scores table not yet created'}
     rows = conn.execute(
@@ -347,9 +345,9 @@ def _resolve_session_reps(conn, user_id: int, session_id: str, limit: int = 30) 
         frame = rd.get('peak_frame') or rd.get('start_frame') or rd.get('end_frame')
         img_path = None
         if frame:
-            img_path = frame if os.path.isabs(frame) else os.path.abspath(os.path.join(backend_dir, frame))
-            if not os.path.isfile(img_path):
-                img_path = None
+            from storage.media import MediaService
+            try:img_path=str(_materialized_frame(conn,user_id,frame))
+            except (PermissionError,ValueError,FileNotFoundError):img_path=None
         raw_series = rd.get('angle_series')
         angle_series = None
         if raw_series:
@@ -369,7 +367,7 @@ def _resolve_session_reps(conn, user_id: int, session_id: str, limit: int = 30) 
             'duration_s': rd.get('duration_s'),
             'feedback': rd.get('feedback'),
             'image_path': img_path,
-            'clip_dir': rd.get('clip_dir'),
+            'clip_dir': _materialized_clip(conn,user_id,rd.get('clip_dir')),
             'angle_series': angle_series,
         })
     return {'ok': True, 'reps': reps, 'count': len(reps)}
@@ -503,11 +501,11 @@ def _make_collage(rep_index: int, frame_paths: List[str], k: int) -> Optional[st
             collage.paste(img, (x, 0))
             x += img.width
         # Save to a temp location on disk
-        collage_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), '..', '..', 'data', 'collages'
-        )
+        from storage.media import media_root
+        collage_dir = str(media_root() / 'collages')
         os.makedirs(collage_dir, exist_ok=True)
-        out_path = os.path.join(collage_dir, f'session_rep{rep_index}_k{k}.jpg')
+        from uuid import uuid4
+        out_path = os.path.join(collage_dir, f'session_rep{rep_index}_k{k}_{uuid4().hex}.jpg')
         collage.save(out_path, 'JPEG', quality=85)
         return out_path
     except Exception as e:
@@ -602,3 +600,31 @@ def get_ai_coach_report_tool(conn, user_id: int, args: Dict[str, Any]) -> Dict[s
     d['ok'] = True
     return d
 
+
+
+def _materialized_clip(conn,user_id,prefix):
+    if not prefix:return None
+    from storage.media import MediaService
+    try:
+        legacy=_explicit_legacy_ai_path(prefix)
+        return str(legacy) if legacy and legacy.is_dir() else str(MediaService().clip(prefix,user_id,conn))
+    except (PermissionError,ValueError,FileNotFoundError):return None
+
+
+def _explicit_legacy_ai_path(value):
+    """Only called after the owning rep/session was checked; never serves URLs."""
+    from pathlib import Path
+    from storage.media import resource_key
+    try:resource_key(value);return None
+    except ValueError:pass
+    if not Path(value).is_absolute():return None
+    path=Path(value).resolve()
+    roots=[Path(p).resolve() for p in os.getenv('AI_AGENT_VISION_FRAME_ROOTS','').split(os.pathsep) if p]
+    return path if any(path.is_relative_to(root) for root in roots) else None
+
+
+def _materialized_frame(conn,user_id,frame):
+    from storage.media import MediaService
+    legacy=_explicit_legacy_ai_path(frame)
+    if legacy and legacy.is_file() and legacy.stat().st_size<=4*1024*1024:return legacy
+    return MediaService().materialize(frame,user_id,conn)
