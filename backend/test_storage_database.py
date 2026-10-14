@@ -4,6 +4,18 @@ import pytest
 from storage.database import connect, initialize, column_names, table_exists, bind_qmarks, Connection
 
 
+def test_concurrent_sqlite_first_boot_across_processes(tmp_path):
+    import subprocess
+    import sys
+    from pathlib import Path
+    env=os.environ.copy();env.pop('DATABASE_URL',None)
+    backend=Path(__file__).resolve().parent
+    env['DB_PATH']=str(tmp_path/'concurrent.db')
+    processes=[subprocess.Popen([sys.executable,'-c','from storage.database import initialize; initialize()'],cwd=backend,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE) for _ in range(4)]
+    outputs=[p.communicate(timeout=30) for p in processes]
+    assert all(p.returncode==0 for p in processes), outputs
+
+
 def test_qmark_literals_and_comments():
     sql, args = bind_qmarks("SELECT '?' AS value, ? AS n /* ? */ -- ?\n", (12,))
     assert sql == "SELECT '?' AS value, :p0 AS n /* ? */ -- ?\n"

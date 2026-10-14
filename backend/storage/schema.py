@@ -38,6 +38,8 @@ def metadata(dialect='postgresql'):
 def initialize_sqlite(engine):
     meta = metadata('sqlite')
     with engine.begin() as conn:
+        # SQLite serializes DDL across processes before any check/create race.
+        conn.exec_driver_sql('BEGIN IMMEDIATE')
         meta.create_all(conn)
         for name, spec in SPEC.items():
             have = {c['name'] for c in sa.inspect(conn).get_columns(name)}
@@ -48,3 +50,6 @@ def initialize_sqlite(engine):
                     if col['default'] is not None and 'julianday' not in col['default']:
                         sql += ' DEFAULT ' + col['default']
                     conn.exec_driver_sql(sql)
+        for table in meta.tables.values():
+            for index in table.indexes:
+                index.create(conn, checkfirst=True)
