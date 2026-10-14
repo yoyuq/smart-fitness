@@ -1,4 +1,4 @@
-﻿"""main_v2_routes.py - Sprint 1/2 Routes.
+"""main_v2_routes.py - Sprint 1/2 Routes.
 
 把所有 v2 路由放在独立模块, 不污染干净的 main.py.
 在 main.py 末尾加: `import main_v2_routes` 即可挂载.
@@ -12,6 +12,7 @@
   /ws/coach/{user_id} (按 user 订阅广播)
   /api/v2/ai/{daily_summary,weekly_report,plan_generate,chat,meal_suggestion}
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import os, sys, json, time, base64, io, asyncio, logging, subprocess, threading, shutil
 from typing import Optional, Dict, Any
 from fastapi import Request, WebSocket, WebSocketDisconnect
@@ -631,12 +632,12 @@ except Exception as e:
 
 # DB 路径
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(ROOT, "fitness.db")
+DB_PATH = default_sqlite_path()
 
 
 def get_db():
     import sqlite3
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn = connect_database(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -843,8 +844,8 @@ async def v2_train_stop(req: Request):
             except Exception:
                 pass  # rep_scores 表还没建 (本会话无完成动作)
             conn.execute(
-                "INSERT OR REPLACE INTO sessions (session_id, device_id, user_id, exercise_type, "
-                "start_time, end_time, total_reps, avg_form_score, status) VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO sessions (session_id, device_id, user_id, exercise_type, "
+                "start_time, end_time, total_reps, avg_form_score, status) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET device_id=excluded.device_id, user_id=excluded.user_id, exercise_type=excluded.exercise_type, start_time=excluded.start_time, end_time=excluded.end_time, total_reps=excluded.total_reps, avg_form_score=excluded.avg_form_score, status=excluded.status",
                 (sess["session_id"], device_id, str(sess["user_id"]), sess["exercise"],
                  sess["started_at"], time.time(), total_reps, avg_form, "completed"))
             conn.commit()

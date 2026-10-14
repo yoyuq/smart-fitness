@@ -9,6 +9,7 @@
   python ai_review.py run [--limit 20]   # 批审还没评过的 rep (需有 peak_frame)
   python ai_review.py report             # 规则分 vs AI 评审分 的标定报告
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import argparse
 import base64
 import json
@@ -27,7 +28,7 @@ except Exception:
     pass
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BACKEND_DIR, "fitness.db")
+DB_PATH = default_sqlite_path()
 
 # 评审模型: 百炼 qwen3-vl-plus (主) — key 从 fitness_agent/.env 或系统环境读取
 try:
@@ -156,7 +157,7 @@ def ensure_review_table(conn):
 
 
 def run_batch(limit=20):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     conn.row_factory = sqlite3.Row
     ensure_review_table(conn)
     rows = conn.execute(
@@ -191,7 +192,7 @@ def run_batch(limit=20):
 
 
 def report():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     conn.row_factory = sqlite3.Row
     ensure_review_table(conn)
     rows = conn.execute(

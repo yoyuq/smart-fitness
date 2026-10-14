@@ -19,10 +19,8 @@ from .registry import register_tool
 
 
 def _table_exists(conn, name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
-    ).fetchone()
-    return bool(row)
+    from storage.database import table_exists
+    return table_exists(conn, name)
 
 
 def _resolve_rep_image(conn, user_id: int, rep_id: int) -> Dict[str, Any]:

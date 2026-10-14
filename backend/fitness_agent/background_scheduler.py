@@ -5,6 +5,7 @@ when to call it while the FastAPI backend process is running. It is deliberately
 best-effort: if the backend is down, jobs simply run on the next process start.
 """
 from __future__ import annotations
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 
 import asyncio
 import logging
@@ -44,7 +45,7 @@ def _user_ids(conn: sqlite3.Connection) -> list[int]:
 
 
 def _run_once(db_path: str) -> dict:
-    conn = sqlite3.connect(db_path, timeout=10)
+    conn = connect_database(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
     now = int(time.time())
     created = 0

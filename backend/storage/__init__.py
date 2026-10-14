@@ -1,0 +1,1 @@
+"""Smart Fitness persistence boundaries."""

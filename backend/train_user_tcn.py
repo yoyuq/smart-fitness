@@ -8,6 +8,7 @@
   datasets/models/rep_quality_userlabel.pt
   datasets/models/tcn_eval.json
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import json
 import os
 import sqlite3
@@ -25,7 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "ml_pose"))
 from poc_skeleton_model import build_tcn  # noqa: E402
 
-DB = os.path.join(HERE, "fitness.db")
+DB = default_sqlite_path()
 MODEL_OUT = os.path.join(HERE, "..", "datasets", "models", "rep_quality_userlabel.pt")
 EVAL_OUT = os.path.join(HERE, "..", "datasets", "models", "tcn_eval.json")
 CHANNELS = ["primary", "torso", "lr_diff", "shoulder"]
@@ -45,7 +46,7 @@ def _series_to_array(s):
 
 
 def load():
-    c = sqlite3.connect(DB)
+    c = connect_database(DB)
     c.row_factory = sqlite3.Row
     rows = c.execute(
         "SELECT angle_series s, true_label t, error_type et, exercise e FROM rep_scores "

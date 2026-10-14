@@ -268,7 +268,7 @@ def _load_user_context(conn: sqlite3.Connection, user_id: int) -> Dict[str, Any]
     # 用户基础
     row = cur.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     if row:
-        ctx["username"] = row["username"] if isinstance(row, sqlite3.Row) else row[0]
+        ctx["username"] = row["username"] if hasattr(row, "keys") else row[0]
 
     # 最近身体指标
     row = cur.execute(
@@ -742,7 +742,7 @@ def _summarize_session_reps(conn, session_id):
     by_ex = {}
     issues = {}
     for r in rows:
-        ex = r[0] if not isinstance(r, sqlite3.Row) else r["exercise"]
+        ex = r[0] if not hasattr(r, "keys") else r["exercise"]
         total = r[1]; depth = r[2]; control = r[3]; symmetry = r[4]; fb = r[7]
         d = by_ex.setdefault(ex, {"n": 0, "total": 0.0, "depth": 0.0, "control": 0.0, "symmetry": 0.0})
         d["n"] += 1

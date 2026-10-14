@@ -1,3 +1,4 @@
+from storage.database import column_names
 """Permission pipeline for Smart Fitness Agent tools.
 
 Implements the s03-style gate order:
@@ -12,6 +13,7 @@ import json
 import sqlite3
 import time
 import uuid
+from typing import Any, Dict, Optional
 from .mcp_client import mcp_permission_decision
 
 WRITE_TOOLS = {
@@ -58,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_tool_approvals_user_status
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
-    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    cols = column_names(conn, table)
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
@@ -177,7 +179,7 @@ def mark_approval(conn: sqlite3.Connection, user_id: int, approval_id: str, stat
 def _row_to_item(row) -> Dict[str, Any]:
     if not row:
         return {}
-    if isinstance(row, sqlite3.Row):
+    if hasattr(row, "keys"):
         args = json.loads(row["args_json"] or "{}")
         result_raw = row["result_json"]
         tool_name = row["tool_name"]

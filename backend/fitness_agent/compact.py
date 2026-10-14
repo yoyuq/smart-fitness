@@ -48,7 +48,7 @@ def get_context_summary(conn: sqlite3.Connection, user_id: int, summary_type: st
     ).fetchone()
     if not row:
         return None
-    return {k: row[k] for k in row.keys()} if isinstance(row, sqlite3.Row) else {
+    return {k: row[k] for k in row.keys()} if hasattr(row, "keys") else {
         "user_id": row[0], "summary_type": row[1], "summary_text": row[2], "source_until_id": row[3],
         "source_until_ts": row[4], "created_at": row[5], "updated_at": row[6]
     }

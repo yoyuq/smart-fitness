@@ -11,10 +11,11 @@
   python rep_quality_tcn.py train      # 训练并存 datasets/models/rep_quality_tcn.pt
   python rep_quality_tcn.py selftest   # 加载模型, 对真实 rep 打分, 验证端到端
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import os, sys, json, sqlite3, math
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BACKEND_DIR, "fitness.db")
+DB_PATH = default_sqlite_path()
 MODEL_DIR = os.path.join(BACKEND_DIR, "..", "datasets", "models")
 CKPT = os.path.join(MODEL_DIR, "rep_quality_tcn.pt")
 CHANNELS = ["primary", "torso", "lr_diff", "shoulder"]   # 与 rep_scorer.angle_series 对齐
@@ -45,7 +46,7 @@ def series_to_matrix(series):
 def load_db(db_path=DB_PATH, target="ai"):
     """target='ai' -> 用 AI 评审分(蒸馏 VLM 评审团); 'rule' -> 用规则分(bootstrap)."""
     import numpy as np
-    c = sqlite3.connect(db_path); c.row_factory = sqlite3.Row
+    c = connect_database(db_path); c.row_factory = sqlite3.Row
     if target == "ai":
         rows = c.execute(
             "SELECT r.exercise AS exercise, r.angle_series AS angle_series, a.ai_score AS y "
@@ -206,7 +207,7 @@ def _selftest():
         print("无数据可测"); return
     X, y, ex = data
     import json as _j, sqlite3 as _s
-    c = _s.connect(DB_PATH); c.row_factory = _s.Row
+    c = connect_database(DB_PATH); c.row_factory = _s.Row
     rows = c.execute("SELECT r.exercise ex, r.angle_series s, r.total rule, a.ai_score ai "
                      "FROM rep_scores r JOIN ai_reviews a ON a.rep_id=r.id "
                      "WHERE a.ai_score IS NOT NULL AND r.angle_series IS NOT NULL LIMIT 12").fetchall()

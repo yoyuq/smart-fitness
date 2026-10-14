@@ -10,6 +10,7 @@
   /api/v2/devices/bind (POST), /bindings (GET), /bind/{device_id} (DELETE)
   /api/v2/vision/infer (POST - 简版, /full 已在 main_v2_routes)
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import os, json, time, uuid, secrets, base64, logging, calendar
 from typing import Optional, Dict, Any
 from fastapi import Request
@@ -22,12 +23,12 @@ from main import app
 log = logging.getLogger("v2_extra")
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(ROOT, "fitness.db")
+DB_PATH = default_sqlite_path()
 
 
 def _db():
     import sqlite3
-    c = sqlite3.connect(DB_PATH, timeout=10)
+    c = connect_database(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
     return c
 

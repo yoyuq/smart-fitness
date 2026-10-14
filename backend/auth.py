@@ -4,6 +4,7 @@ auth.py — User Authentication Module (V2)
 JWT-based auth with bcrypt password hashing.
 PostgreSQL/SQLite compatible.
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source, initialize
 import os, time, json
 from typing import Optional, Dict, Any
 import sqlite3
@@ -14,17 +15,18 @@ from datetime import datetime, timedelta, timezone
 _SECRET = os.getenv("JWT_SECRET", "smart-fitness-dev-secret-change-in-prod")
 _JWT_ALGO = "HS256"
 _TOKEN_EXPIRE_DAYS = 7
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fitness.db")
+DB_PATH = default_sqlite_path()
 
 
 def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
 def init_auth_db():
+    initialize(DB_PATH)
     """Create users + workout_plans + devices + rate_limit tables."""
     conn = _get_conn()
     # Migrate old devices table if needed
@@ -177,7 +179,7 @@ def register_device(device_id: str, device_type: str = "phone", name: str = "", 
     conn = _get_conn()
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO devices (device_id, device_type, name, user_id, last_seen) VALUES (?,?,?,?,?)",
+            "INSERT INTO devices (device_id, device_type, name, user_id, last_seen) VALUES (?,?,?,?,?) ON CONFLICT(device_id) DO UPDATE SET device_type=excluded.device_type, name=excluded.name, user_id=excluded.user_id, last_seen=excluded.last_seen",
             (device_id, device_type, name, user_id, time.time())
         )
         conn.commit()
