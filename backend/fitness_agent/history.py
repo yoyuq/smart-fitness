@@ -123,6 +123,26 @@ def get_agent_chat_history(
     return out
 
 
+def count_agent_chat_history(
+    conn: sqlite3.Connection,
+    user_id: int,
+    roles: Optional[Union[List[str], Tuple[str, ...]]] = None,
+) -> int:
+    """Count all matching messages for one user, without a history limit."""
+    roles = _normalize_roles(roles)
+    ensure_agent_chat_schema(conn)
+    if roles == ():
+        return 0
+    role_filter = "" if roles is None else " AND role IN ({})".format(
+        ",".join("?" for _ in roles)
+    )
+    row = conn.execute(
+        "SELECT COUNT(*) FROM agent_chat_messages WHERE user_id=?" + role_filter,
+        (user_id, *(roles or ())),
+    ).fetchone()
+    return int(row[0])
+
+
 def delete_agent_chat_history(conn: sqlite3.Connection, user_id: int) -> int:
     ensure_agent_chat_schema(conn)
     cur = conn.execute("DELETE FROM agent_chat_messages WHERE user_id=?", (user_id,))
