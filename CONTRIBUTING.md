@@ -15,9 +15,18 @@ For a high-level project overview, see [README.md](README.md). For deployment in
 
 ### Clone the repository
 
+The canonical repository is [yoyuq/smart-fitness](https://github.com/yoyuq/smart-fitness).
+
 ```bash
-git clone https://github.com/your-username/smart_fitness.git
-cd smart_fitness
+git clone https://github.com/yoyuq/smart-fitness.git
+cd smart-fitness
+```
+
+If you are contributing from a fork, first fork the repository on GitHub (the fork will be created under your account as `your-username/smart-fitness`), then clone your fork:
+
+```bash
+git clone https://github.com/your-username/smart-fitness.git
+cd smart-fitness
 ```
 
 ### Set up a Python virtual environment
@@ -112,14 +121,15 @@ Before opening a pull request:
    ```bash
    python -m pytest tests/test_rep_scorer.py -q
    ```
-2. For backend changes, start the server and check the health endpoint:
+2. **Report test results honestly.** Compare your branch's test output against the unchanged `main` branch (the baseline). Distinguish pre-existing failures on `main` from regressions your change introduces. Do not claim a test suite passed just because the command ran — include the actual output in your PR description.
+3. For backend changes, start the server and check the health endpoint:
    ```bash
    cd backend
    python -m uvicorn main:app --host 0.0.0.0 --port 8080
    # In another terminal:
    curl http://localhost:8080/health
    ```
-3. For documentation-only changes, verify links and readability locally.
+4. For documentation-only changes, verify links and readability locally.
 
 ## Pull Requests
 
