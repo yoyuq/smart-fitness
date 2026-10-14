@@ -1,6 +1,8 @@
 import argparse
 import json
 import tempfile
+import os
+from sqlalchemy.engine import make_url
 from pathlib import Path
 from alembic import command
 from alembic.config import Config
@@ -11,6 +13,28 @@ def upgrade():
     cfg.set_main_option('script_location', str(Path(__file__).with_name('migrations')))
     cfg.attributes['database_url'] = database_url()
     command.upgrade(cfg, 'head')
+
+
+def report_destination(args):
+    report=Path(args.report).resolve()
+    protected=[Path(p).resolve() for p in getattr(args,'source',[])]
+    if getattr(args,'output',None):protected.append(Path(args.output).resolve())
+    url=make_url(database_url())
+    if url.get_backend_name()=='sqlite' and url.database and url.database!=':memory:':protected.append(Path(url.database).resolve())
+    if report in protected or report.exists() or Path(args.report).is_symlink():
+        raise ValueError('Report must be a new file distinct from all source, target and recovery files')
+    report.parent.mkdir(parents=True,exist_ok=True)
+    return report
+
+
+def write_report(path,report):
+    with tempfile.NamedTemporaryFile(dir=path.parent,delete=False) as stream:
+        temp=Path(stream.name)
+        stream.write(json.dumps(report,indent=2).encode('utf-8'));stream.flush();os.fsync(stream.fileno())
+    try:
+        # Same-filesystem exclusive publication; never replace another file.
+        os.link(temp,path)
+    finally:temp.unlink(missing_ok=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -24,6 +48,7 @@ if __name__ == '__main__':
             p.add_argument('--allow-legacy-orphans',action='store_true')
     export=sub.add_parser('export-recovery');export.add_argument('--output',required=True);export.add_argument('--report',required=True);export.add_argument('--writers-stopped',action='store_true',required=True)
     args=parser.parse_args()
+    report_path=report_destination(args) if hasattr(args,'report') else None
     from .transfer import snapshot, classify, import_sqlite, export_recovery
     if args.command=='upgrade':upgrade()
     elif args.command=='snapshot':print(json.dumps(snapshot(args.source,args.output)))
@@ -36,9 +61,9 @@ if __name__ == '__main__':
                 output=Path(tmp)/f'source-{index}.db';snapshot(source,output);sources.append(output)
             if args.command=='classify':_,report=classify(sources)
             else:report=import_sqlite(sources,database_url(),allow_legacy_orphans=args.allow_legacy_orphans)
-        Path(args.report).write_text(json.dumps(report,indent=2),encoding='utf-8')
+        write_report(report_path,report)
         print('Storage report written; row contents and credentials omitted')
     else:
         report=export_recovery(database_url(),args.output)
-        Path(args.report).write_text(json.dumps(report,indent=2),encoding='utf-8')
+        write_report(report_path,report)
         print('Verified recovery export written')

@@ -7,6 +7,7 @@ import ast
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 import sqlalchemy as sa
 from .schema import current_spec, metadata, initialize_sqlite
@@ -21,8 +22,8 @@ def snapshot(source, destination):
         raise ValueError('SQLite source does not exist')
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with sqlite3.connect(source.as_uri()+'?mode=ro', uri=True) as src:
-            with sqlite3.connect(destination) as dst:
+        with closing(sqlite3.connect(source.as_uri()+'?mode=ro', uri=True)) as src:
+            with closing(sqlite3.connect(destination)) as dst:
                 src.backup(dst)
                 if dst.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                     raise ValueError('Snapshot integrity check failed')
@@ -69,10 +70,10 @@ def _digest(rows):
 
 def classify(sources):
     tables={}
-    report={'sources':[],'tables':{},'relations':[]}
+    report={'sources':[],'tables':{},'relations':[],'sequences':{}}
     for source in sources:
         source=Path(source).resolve()
-        with sqlite3.connect(source.as_uri()+'?mode=ro',uri=True) as conn:
+        with closing(sqlite3.connect(source.as_uri()+'?mode=ro',uri=True)) as conn:
             conn.row_factory=sqlite3.Row
             if conn.execute('PRAGMA integrity_check').fetchone()[0]!='ok':
                 raise ValueError('Source integrity failed')
@@ -102,6 +103,11 @@ def classify(sources):
                     else:
                         dest[key]=normalized;added+=1
                 source_report['tables'][name]={'unique_added':added,'identical_duplicates':duplicates}
+                if spec['autoincrement']:
+                    pk_name=next(c['name'] for c in spec['columns'] if c['pk'])
+                    maximum=max((row[pk_name] for row in dest.values()),default=0)
+                    history=_sqlite_high_water(conn,name)
+                    report['sequences'][name]=max(report['sequences'].get(name,0),maximum,history)
             report['sources'].append(source_report)
     for name, rows in tables.items():
         rows=list(rows.values());tables[name]=rows
@@ -150,9 +156,12 @@ def import_sqlite(sources, target_url, *, allow_legacy_orphans=False, batch_size
                 for name,spec in SPEC.items():
                     if not spec['autoincrement']:continue
                     pk=next(c['name'] for c in spec['columns'] if c['pk'])
-                    maximum=conn.exec_driver_sql(f'SELECT max("{pk}") FROM "{name}"').scalar()
+                    maximum=max(report['sequences'].get(name,0),_pg_high_water(conn,name,pk))
                     conn.execute(sa.text("SELECT setval(pg_get_serial_sequence(:table,:column), :maximum, :called)"),
                         {'table':name,'column':pk,'maximum':max(1,maximum or 1),'called':bool(maximum and maximum>=1)})
+            else:
+                for name,high in report['sequences'].items():
+                    _set_sqlite_high_water(conn,name,high)
         report.update(verified=True,legacy_orphans_preserved=orphan_count)
         return report
     finally:engine.dispose()
@@ -177,8 +186,13 @@ def export_recovery(source_url, destination):
         with source.connect().execution_options(isolation_level='REPEATABLE READ' if source.dialect.name=='postgresql' else 'SERIALIZABLE') as src:
             with src.begin():
                 if source.dialect.name=='postgresql':src.exec_driver_sql('SET TRANSACTION READ ONLY')
+                else:src.exec_driver_sql('BEGIN')
                 unknown=set(sa.inspect(src).get_table_names())-set(SPEC)-{'alembic_version'}
                 if unknown:raise ValueError('Unknown recovery tables require explicit preservation')
+                for name in SPEC:
+                    actual={col['name'] for col in sa.inspect(src).get_columns(name)}
+                    expected={col['name'] for col in SPEC[name]['columns']}
+                    if actual!=expected:raise ValueError('Recovery schema mismatch for '+name+'; explicit preservation required')
                 with target.begin() as dst:
                     for name,table in meta.tables.items():
                         rows=[dict(r) for r in src.execute(sa.select(table)).mappings()]
@@ -187,6 +201,11 @@ def export_recovery(source_url, destination):
                         restored=[dict(r) for r in dst.execute(sa.select(table)).mappings()]
                         if _digest(rows)!=_digest(restored):raise ValueError('Recovery content mismatch for '+name)
                         report['tables'][name]={'count':len(rows),'sha256':_digest(rows)}
+                        if SPEC[name]['autoincrement']:
+                            pk=next(c['name'] for c in SPEC[name]['columns'] if c['pk'])
+                            high=_pg_high_water(src,name,pk) if source.dialect.name=='postgresql' else _sqlite_high_water(src.connection.driver_connection,name)
+                            _set_sqlite_high_water(dst,name,high)
+                            report['tables'][name]['sequence_high_water']=high
         report['verified']=True
         return report
     except Exception:
@@ -195,3 +214,26 @@ def export_recovery(source_url, destination):
         raise
     finally:
         source.dispose();target.dispose()
+
+
+def _sqlite_high_water(conn,name):
+    exists=conn.execute("SELECT 1 FROM sqlite_master WHERE name='sqlite_sequence'").fetchone()
+    if not exists:return 0
+    row=conn.execute('SELECT MAX(seq) FROM sqlite_sequence WHERE name=?',(name,)).fetchone()
+    return int(row[0] or 0)
+
+
+def _pg_high_water(conn,name,column):
+    sequence=conn.execute(sa.text('SELECT pg_get_serial_sequence(:table,:column)'),{'table':name,'column':column}).scalar()
+    if not sequence:raise ValueError('Expected generated sequence is missing for '+name)
+    # Names come from PostgreSQL's catalogue, quote each identifier component.
+    qualified='.'.join(conn.dialect.identifier_preparer.quote_identifier(part) for part in sequence.split('.'))
+    value,called=conn.exec_driver_sql('SELECT last_value,is_called FROM '+qualified).one()
+    return int(value) if called else max(0,int(value)-1)
+
+
+def _set_sqlite_high_water(conn,name,high):
+    row=conn.exec_driver_sql('SELECT MAX(seq) FROM sqlite_sequence WHERE name=?',(name,)).scalar()
+    high=max(int(row or 0),int(high))
+    if row is None:conn.exec_driver_sql('INSERT INTO sqlite_sequence(name,seq) VALUES (?,?)',(name,high))
+    else:conn.exec_driver_sql('UPDATE sqlite_sequence SET seq=? WHERE name=?',(high,name))

@@ -3,6 +3,10 @@ import pytest
 import sqlalchemy as sa
 import os
 import uuid
+import subprocess
+import sys
+from pathlib import Path
+from contextlib import closing
 from storage.schema import initialize_sqlite
 from storage.transfer import snapshot, classify, import_sqlite, export_recovery
 
@@ -30,6 +34,7 @@ def test_online_snapshot_includes_committed_wal(tmp_path):
     conn.execute("INSERT INTO coach_memory(user_id,note,created_at) VALUES (41,'kept in WAL',123)")
     conn.commit()
     output=tmp_path/'snapshot.db';snapshot(source,output)
+    renamed=tmp_path/'renamed.db';output.rename(renamed);renamed.rename(output)
     rows,report=classify([output])
     assert rows['coach_memory'][0]['note']=='kept in WAL'
     assert report['tables']['users']['count']==1
@@ -89,6 +94,44 @@ def test_recovery_preserves_new_writes(tmp_path):
     with sqlite3.connect(dest) as conn:assert conn.execute('SELECT COUNT(*) FROM users WHERE id=42').fetchone()[0]==1
 
 
+def test_deleted_id_sequence_high_water_survives_import_and_export(tmp_path):
+    source=make_source(tmp_path/'source.db')
+    with closing(sqlite3.connect(source)) as conn:
+        conn.execute("INSERT INTO users(id,username,password_hash,created_at) VALUES (91,'deleted-high','hash',1)")
+        conn.execute('DELETE FROM users WHERE id=91');conn.commit()
+    url=target(tmp_path/'target.db')
+    assert import_sqlite([source],url)['sequences']['users']==91
+    with closing(sqlite3.connect(tmp_path/'target.db')) as conn:
+        assert conn.execute("INSERT INTO users(username,password_hash,created_at) VALUES ('after-high','hash',1)").lastrowid>91
+    export_recovery('sqlite:///'+source.as_posix(),tmp_path/'recovery-high.db')
+    with closing(sqlite3.connect(tmp_path/'recovery-high.db')) as conn:
+        assert conn.execute("INSERT INTO users(username,password_hash,created_at) VALUES ('after-export','hash',1)").lastrowid>91
+
+
+def test_recovery_rejects_unrecognized_columns(tmp_path):
+    source=make_source(tmp_path/'source.db')
+    with closing(sqlite3.connect(source)) as conn:
+        conn.execute('ALTER TABLE users ADD COLUMN extra_business_field TEXT');conn.commit()
+    destination=tmp_path/'refused.db'
+    with pytest.raises(ValueError,match='schema mismatch'):export_recovery('sqlite:///'+source.as_posix(),destination)
+    assert not destination.exists()
+
+
+def test_cli_closes_snapshots_and_protects_database_paths(tmp_path):
+    source=make_source(tmp_path/'source.db');report=tmp_path/'classification.json'
+    env={**os.environ,'DATABASE_URL':'sqlite:///'+source.as_posix()}
+    backend=Path(__file__).parent
+    result=subprocess.run([sys.executable,'-m','storage','classify','--source',str(source),'--report',str(report)],cwd=backend,env=env,capture_output=True)
+    assert result.returncode==0,result.stderr
+    assert report.is_file()
+    dest=tmp_path/'recovery.db'
+    result=subprocess.run([sys.executable,'-m','storage','export-recovery','--output',str(dest),'--report',str(dest),'--writers-stopped'],cwd=backend,env=env,capture_output=True)
+    assert result.returncode!=0 and not dest.exists()
+    original=source.read_bytes()
+    result=subprocess.run([sys.executable,'-m','storage','classify','--source',str(source),'--report',str(source)],cwd=backend,env=env,capture_output=True)
+    assert result.returncode!=0 and source.read_bytes()==original
+
+
 @pytest.mark.skipif(not os.getenv('DATABASE_URL','').startswith('postgresql'),reason='requires isolated PostgreSQL')
 def test_real_postgresql_import_sequences_and_new_write_recovery(tmp_path):
     from sqlalchemy.engine import make_url
@@ -113,9 +156,14 @@ def test_real_postgresql_import_sequences_and_new_write_recovery(tmp_path):
         with pg.begin() as conn:
             assert conn.exec_driver_sql("INSERT INTO users(username,password_hash,created_at) VALUES ('new-pg-write','hash',1) RETURNING id").scalar()>41
             assert conn.exec_driver_sql("INSERT INTO rep_scores(session_id,total) VALUES ('sess',88) RETURNING id").scalar()>51
+            conn.exec_driver_sql("INSERT INTO users(id,username,password_hash,created_at) VALUES (199,'deleted-high','hash',1)")
+            conn.exec_driver_sql("SELECT setval(pg_get_serial_sequence('users','id'),199,true)")
+            conn.exec_driver_sql('DELETE FROM users WHERE id=199')
         recovery=export_recovery(pg_url,tmp_path/'recovered.db')
         assert recovery['tables']['users']['count']==2
         assert recovery['tables']['rep_scores']['count']==2
+        with closing(sqlite3.connect(tmp_path/'recovered.db')) as conn:
+            assert conn.execute("INSERT INTO users(username,password_hash,created_at) VALUES ('after-recovery','hash',1)").lastrowid>199
         pg.dispose()
     finally:
         with admin.connect() as conn:conn.exec_driver_sql('DROP DATABASE '+name+' WITH (FORCE)')
