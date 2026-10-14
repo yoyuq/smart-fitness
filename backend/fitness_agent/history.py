@@ -3,7 +3,7 @@ import json
 import re
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 def _sanitize_agent_content(content: str) -> str:
@@ -70,18 +70,41 @@ def add_agent_chat_message(
     return int(cur.lastrowid)
 
 
-def get_agent_chat_history(conn: sqlite3.Connection, user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+def _normalize_roles(roles: Optional[Union[List[str], Tuple[str, ...]]]) -> Optional[Tuple[str, ...]]:
+    """Validate a role selection and remove duplicates while preserving order."""
+    if roles is None:
+        return None
+    if not isinstance(roles, (list, tuple)):
+        raise ValueError("roles must be None or a list/tuple of user/assistant strings")
+    if any(not isinstance(role, str) or role not in ("user", "assistant") for role in roles):
+        raise ValueError("roles may contain only user/assistant strings")
+    return tuple(dict.fromkeys(roles))
+
+
+def get_agent_chat_history(
+    conn: sqlite3.Connection,
+    user_id: int,
+    limit: int = 50,
+    roles: Optional[Union[List[str], Tuple[str, ...]]] = None,
+) -> List[Dict[str, Any]]:
+    """Return recent matching messages in ascending insertion order."""
+    roles = _normalize_roles(roles)
     ensure_agent_chat_schema(conn)
     limit = max(1, min(int(limit or 50), 200))
+    if roles == ():
+        return []
+    role_filter = "" if roles is None else " AND role IN ({})".format(
+        ",".join("?" for _ in roles)
+    )
     rows = conn.execute(
-        """
+        f"""
         SELECT id, role, content, mode, domains_json, created_at
         FROM agent_chat_messages
-        WHERE user_id=?
+        WHERE user_id=?{role_filter}
         ORDER BY id DESC
         LIMIT ?
         """,
-        (user_id, limit),
+        (user_id, *(roles or ()), limit),
     ).fetchall()
     out: List[Dict[str, Any]] = []
     for r in reversed(rows):
@@ -98,6 +121,26 @@ def get_agent_chat_history(conn: sqlite3.Connection, user_id: int, limit: int = 
             "created_at": r["created_at"],
         })
     return out
+
+
+def count_agent_chat_history(
+    conn: sqlite3.Connection,
+    user_id: int,
+    roles: Optional[Union[List[str], Tuple[str, ...]]] = None,
+) -> int:
+    """Count all matching messages for one user, without a history limit."""
+    roles = _normalize_roles(roles)
+    ensure_agent_chat_schema(conn)
+    if roles == ():
+        return 0
+    role_filter = "" if roles is None else " AND role IN ({})".format(
+        ",".join("?" for _ in roles)
+    )
+    row = conn.execute(
+        "SELECT COUNT(*) FROM agent_chat_messages WHERE user_id=?" + role_filter,
+        (user_id, *(roles or ())),
+    ).fetchone()
+    return int(row[0])
 
 
 def delete_agent_chat_history(conn: sqlite3.Connection, user_id: int) -> int:
