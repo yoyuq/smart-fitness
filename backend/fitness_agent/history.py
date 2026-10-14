@@ -70,18 +70,35 @@ def add_agent_chat_message(
     return int(cur.lastrowid)
 
 
-def get_agent_chat_history(conn: sqlite3.Connection, user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+def get_agent_chat_history(
+    conn: sqlite3.Connection,
+    user_id: int,
+    limit: int = 50,
+    before_id: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Return the newest matching rows in ID order, optionally before a cursor."""
+    if before_id is not None and (
+        isinstance(before_id, bool) or not isinstance(before_id, int) or before_id <= 0
+    ):
+        raise ValueError("before_id must be a positive integer or None")
     ensure_agent_chat_schema(conn)
     limit = max(1, min(int(limit or 50), 200))
+    cursor_clause = ""
+    params = [user_id]
+    # SQLite IDs are signed 64-bit integers; larger cursors include every ID.
+    if before_id is not None and before_id <= 9223372036854775807:
+        cursor_clause = " AND id < ?"
+        params.append(before_id)
+    params.append(limit)
     rows = conn.execute(
-        """
+        f"""
         SELECT id, role, content, mode, domains_json, created_at
         FROM agent_chat_messages
-        WHERE user_id=?
+        WHERE user_id=?{cursor_clause}
         ORDER BY id DESC
         LIMIT ?
         """,
-        (user_id, limit),
+        params,
     ).fetchall()
     out: List[Dict[str, Any]] = []
     for r in reversed(rows):
