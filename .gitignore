@@ -41,6 +41,9 @@ backend/_bench*.py
 
 # Temp scripts and files
 _*.py
+!backend/fitness_agent/toolkit/__init__.py
+!backend/storage/__init__.py
+!backend/storage/__main__.py
 _*.ps1
 _*.json
 _*.txt

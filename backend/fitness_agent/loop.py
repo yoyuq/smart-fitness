@@ -3,6 +3,7 @@
 The loop stays deliberately small: LLM -> tool_calls -> tool_results -> LLM.
 Runtime/state, knowledge loading, permission checks and hooks live around it.
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import json
 import os
 import re
@@ -534,8 +535,7 @@ def _approval_reply_for_forced_call(call: Dict[str, Any], item: Dict[str, Any]) 
 
 def _db_path_for_conn(conn) -> Optional[str]:
     try:
-        row = conn.execute("PRAGMA database_list").fetchone()
-        return row[2] if row and len(row) > 2 else None
+        return connection_source(conn)
     except Exception:
         return None
 
@@ -543,7 +543,7 @@ def _db_path_for_conn(conn) -> Optional[str]:
 def _open_worker_conn(db_path: Optional[str]):
     if not db_path:
         return None
-    worker = sqlite3.connect(db_path, timeout=10, check_same_thread=False)
+    worker = connect_database(db_path, timeout=10, check_same_thread=False)
     worker.row_factory = sqlite3.Row
     return worker
 

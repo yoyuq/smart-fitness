@@ -1,0 +1,2117 @@
+{
+  "exercise_log": {
+    "columns": [
+      {
+        "name": "log_id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "device_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercise_type",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "reps",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "duration_s",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "avg_form_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "autoincrement": true,
+    "relations": []
+  },
+  "devices": {
+    "columns": [
+      {
+        "name": "device_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "name",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "firmware_version",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "last_seen",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "wifi_rssi",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "status",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'offline'",
+        "pk": 0
+      },
+      {
+        "name": "device_type",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'phone'",
+        "pk": 0
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_devices_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "device_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "sessions": {
+    "columns": [
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "device_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "user_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercise_type",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "start_time",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "end_time",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "total_reps",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "avg_form_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "status",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'active'",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_sessions_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "session_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": [
+      {
+        "column": "device_id",
+        "table": "devices",
+        "target": "device_id"
+      }
+    ]
+  },
+  "pose_data": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "timestamp",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercise_type",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "rep_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "form_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "angles_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "landmarks_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_pose_exercise_ts",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "exercise_type",
+          "timestamp"
+        ]
+      },
+      {
+        "name": "idx_pose_session_ts",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "session_id",
+          "timestamp"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": [
+      {
+        "column": "session_id",
+        "table": "sessions",
+        "target": "session_id"
+      }
+    ]
+  },
+  "sensor_data": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "timestamp",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "heart_rate",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "hr_confidence",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "movement_intensity",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "body_angle",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "accel_x",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "accel_y",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "accel_z",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "autoincrement": true,
+    "relations": [
+      {
+        "column": "session_id",
+        "table": "sessions",
+        "target": "session_id"
+      }
+    ]
+  },
+  "feedback_log": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "timestamp",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "severity",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "message",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "autoincrement": true,
+    "relations": [
+      {
+        "column": "session_id",
+        "table": "sessions",
+        "target": "session_id"
+      }
+    ]
+  },
+  "users": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "username",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "password_hash",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "display_name",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "''",
+        "pk": 0
+      },
+      {
+        "name": "avatar",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "''",
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "REAL",
+        "nullable": false,
+        "default": "julianday('now')",
+        "pk": 0
+      },
+      {
+        "name": "last_login",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_users_1",
+        "unique": true,
+        "origin": "u",
+        "columns": [
+          "username"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": []
+  },
+  "workout_plans": {
+    "columns": [
+      {
+        "name": "plan_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "name",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercises",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'[]'",
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "REAL",
+        "nullable": true,
+        "default": "julianday('now')",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_workout_plans_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "plan_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": [
+      {
+        "column": "user_id",
+        "table": "users",
+        "target": "id"
+      }
+    ]
+  },
+  "rate_limits": {
+    "columns": [
+      {
+        "name": "ip",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "endpoint",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 2
+      },
+      {
+        "name": "count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "1",
+        "pk": 0
+      },
+      {
+        "name": "window_start",
+        "type": "REAL",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_rate_limits_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "ip",
+          "endpoint"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "user_body_metrics": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "timestamp",
+        "type": "REAL",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "weight_kg",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "height_cm",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "body_fat_pct",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "resting_hr",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "notes",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "''",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_body_metrics_user_ts",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "timestamp"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": [
+      {
+        "column": "user_id",
+        "table": "users",
+        "target": "id"
+      }
+    ]
+  },
+  "user_exercise_log": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercise_type",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "reps",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "sets",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "1",
+        "pk": 0
+      },
+      {
+        "name": "duration_seconds",
+        "type": "REAL",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "avg_form_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "calories_kcal",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "performed_at",
+        "type": "REAL",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_exercise_log_session",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "session_id"
+        ]
+      },
+      {
+        "name": "idx_exercise_log_user_ts",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "performed_at"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": [
+      {
+        "column": "session_id",
+        "table": "sessions",
+        "target": "session_id"
+      },
+      {
+        "column": "user_id",
+        "table": "users",
+        "target": "id"
+      }
+    ]
+  },
+  "device_user_binding": {
+    "columns": [
+      {
+        "name": "device_id",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 2
+      },
+      {
+        "name": "token",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "bound_at",
+        "type": "REAL",
+        "nullable": false,
+        "default": "julianday('now')",
+        "pk": 0
+      },
+      {
+        "name": "last_used_at",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "active",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "1",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_binding_token",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "token"
+        ]
+      },
+      {
+        "name": "idx_binding_user",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "active"
+        ]
+      },
+      {
+        "name": "sqlite_autoindex_device_user_binding_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "device_id",
+          "user_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": [
+      {
+        "column": "user_id",
+        "table": "users",
+        "target": "id"
+      },
+      {
+        "column": "device_id",
+        "table": "devices",
+        "target": "device_id"
+      }
+    ]
+  },
+  "daily_summary": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "date",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "total_reps",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "total_sets",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "total_duration_sec",
+        "type": "REAL",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "avg_form_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "total_calories",
+        "type": "REAL",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "exercises_done",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "sessions_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "updated_at",
+        "type": "REAL",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_daily_summary_user_date",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "date"
+        ]
+      },
+      {
+        "name": "sqlite_autoindex_daily_summary_1",
+        "unique": true,
+        "origin": "u",
+        "columns": [
+          "user_id",
+          "date"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": [
+      {
+        "column": "user_id",
+        "table": "users",
+        "target": "id"
+      }
+    ]
+  },
+  "rep_scores": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "rep_index",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercise",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "depth",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "control",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "symmetry",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "total",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "peak_angle",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "duration_s",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "feedback",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "ts",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "start_frame",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "peak_frame",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "end_frame",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "angle_series",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "clip_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "clip_dir",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "true_label",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "error_type",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "autoincrement": true,
+    "relations": []
+  },
+  "coach_memory": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "category",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'general'",
+        "pk": 0
+      },
+      {
+        "name": "note",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "kind",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "source",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'agent'",
+        "pk": 0
+      },
+      {
+        "name": "confidence",
+        "type": "REAL",
+        "nullable": true,
+        "default": "1.0",
+        "pk": 0
+      },
+      {
+        "name": "active",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "1",
+        "pk": 0
+      },
+      {
+        "name": "run_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "metadata_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'{}'",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_coach_memory_run_id",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "run_id"
+        ]
+      },
+      {
+        "name": "idx_coach_memory_user_kind_active",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "kind",
+          "active",
+          "created_at"
+        ]
+      },
+      {
+        "name": "idx_coach_memory_user_created",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "created_at"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": []
+  },
+  "workout_reports": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "report_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "autoincrement": true,
+    "relations": []
+  },
+  "ai_reviews": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "rep_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "model",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "person_visible",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "errors_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "ai_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "notes",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "autoincrement": true,
+    "relations": []
+  },
+  "ai_coach_reports": {
+    "columns": [
+      {
+        "name": "report_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "session_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "exercise",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "rep_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "frames_per_rep",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "overall_score",
+        "type": "REAL",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "performance_rating",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "stage1_ok_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "stage1_total",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "report_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "note",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "REAL",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_ai_coach_reports_session",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "session_id"
+        ]
+      },
+      {
+        "name": "idx_ai_coach_reports_user",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "created_at"
+        ]
+      },
+      {
+        "name": "sqlite_autoindex_ai_coach_reports_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "report_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "agent_background_items": {
+    "columns": [
+      {
+        "name": "item_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "job",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "kind",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "title",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "message",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "payload_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'{}'",
+        "pk": 0
+      },
+      {
+        "name": "status",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'pending'",
+        "pk": 0
+      },
+      {
+        "name": "requires_approval",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "dedupe_key",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "updated_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "read_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_agent_background_user_status",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "status",
+          "created_at"
+        ]
+      },
+      {
+        "name": "idx_agent_background_user_created",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "created_at"
+        ]
+      },
+      {
+        "name": "idx_agent_background_dedupe",
+        "unique": true,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "dedupe_key"
+        ]
+      },
+      {
+        "name": "sqlite_autoindex_agent_background_items_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "item_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "agent_context_summaries": {
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "summary_type",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 2
+      },
+      {
+        "name": "summary_text",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "source_until_id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "source_until_ts",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "updated_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_agent_context_summaries_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "user_id",
+          "summary_type"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "agent_chat_messages": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "role",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "content",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "mode",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'auto'",
+        "pk": 0
+      },
+      {
+        "name": "domains_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'[]'",
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_agent_chat_user_id_id",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "id"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": []
+  },
+  "agent_tool_approvals": {
+    "columns": [
+      {
+        "name": "approval_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "run_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "tool_name",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "args_json",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "reason",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "status",
+        "type": "TEXT",
+        "nullable": false,
+        "default": "'pending'",
+        "pk": 0
+      },
+      {
+        "name": "result_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "decided_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_agent_tool_approvals_run_id",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "run_id"
+        ]
+      },
+      {
+        "name": "idx_agent_tool_approvals_user_status",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "status",
+          "created_at"
+        ]
+      },
+      {
+        "name": "sqlite_autoindex_agent_tool_approvals_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "approval_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "agent_runs": {
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "status",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "mode",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'auto'",
+        "pk": 0
+      },
+      {
+        "name": "user_message",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "final_text",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "domains_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'[]'",
+        "pk": 0
+      },
+      {
+        "name": "trace_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'[]'",
+        "pk": 0
+      },
+      {
+        "name": "todos_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'[]'",
+        "pk": 0
+      },
+      {
+        "name": "pending_approval_ids_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'[]'",
+        "pk": 0
+      },
+      {
+        "name": "error_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "updated_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "completed_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_agent_runs_user_created",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "user_id",
+          "created_at"
+        ]
+      },
+      {
+        "name": "sqlite_autoindex_agent_runs_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "run_id"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  },
+  "agent_run_events": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "run_id",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "event_type",
+        "type": "TEXT",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "payload_json",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "'{}'",
+        "pk": 0
+      },
+      {
+        "name": "created_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_agent_run_events_run_id",
+        "unique": false,
+        "origin": "c",
+        "columns": [
+          "run_id",
+          "id"
+        ]
+      }
+    ],
+    "autoincrement": true,
+    "relations": []
+  },
+  "agent_provider_health": {
+    "columns": [
+      {
+        "name": "provider",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 1
+      },
+      {
+        "name": "consecutive_failures",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "cooldown_until",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "last_success_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "last_failure_at",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "last_error_type",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "last_error_message",
+        "type": "TEXT",
+        "nullable": true,
+        "default": null,
+        "pk": 0
+      },
+      {
+        "name": "success_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "failure_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0",
+        "pk": 0
+      },
+      {
+        "name": "updated_at",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "name": "sqlite_autoindex_agent_provider_health_1",
+        "unique": true,
+        "origin": "pk",
+        "columns": [
+          "provider"
+        ]
+      }
+    ],
+    "autoincrement": false,
+    "relations": []
+  }
+}

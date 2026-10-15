@@ -1,4 +1,4 @@
-﻿"""train_aqa.py - 时序动作质量评估(AQA)模型 (评分V2 第四阶段进阶)
+"""train_aqa.py - 时序动作质量评估(AQA)模型 (评分V2 第四阶段进阶)
 
 把 AI 评审团标签(ai_reviews.errors_json)当训练目标, 把每个 rep 的**角度时序**
 (rep_scores.angle_series, 4通道×32帧)当输入, 训练"每类错误一个时序分类器"。
@@ -10,13 +10,14 @@
   python train_aqa.py status   # 看可用时序+标注数据量(按动作×错误)
   python train_aqa.py train    # 训练并存 datasets/models/aqa_<ex>_<err>.pt
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import argparse
 import json
 import os
 import sqlite3
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BACKEND_DIR, "fitness.db")
+DB_PATH = default_sqlite_path()
 MODEL_DIR = os.path.join(BACKEND_DIR, "..", "datasets", "models")
 SERIES_LEN = 32
 CHANNELS = ["primary", "torso", "lr_diff", "shoulder"]
@@ -70,7 +71,7 @@ def _augment(mat, rng):
 
 
 def status():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     data = _load_series_labeled(conn)
     conn.close()
     print(f"有角度时序+标注的 rep: {len(data)}")
@@ -98,7 +99,7 @@ def train():
     except ImportError as e:
         print(f"缺依赖: {e}")
         return
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     data = _load_series_labeled(conn)
     conn.close()
     os.makedirs(MODEL_DIR, exist_ok=True)

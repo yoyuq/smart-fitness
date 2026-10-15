@@ -179,7 +179,7 @@ def record_provider_success(conn: sqlite3.Connection, provider: str) -> None:
             consecutive_failures=0,
             cooldown_until=0,
             last_success_at=excluded.last_success_at,
-            success_count=success_count+1,
+            success_count=agent_provider_health.success_count+1,
             updated_at=excluded.updated_at
         """,
         (provider, now, now),
@@ -213,7 +213,7 @@ def record_provider_failure(
             last_failure_at=excluded.last_failure_at,
             last_error_type=excluded.last_error_type,
             last_error_message=excluded.last_error_message,
-            failure_count=failure_count+1,
+            failure_count=agent_provider_health.failure_count+1,
             updated_at=excluded.updated_at
         """,
         (provider, consecutive, cooldown_until, now, error_type[:80], message[:500], now),

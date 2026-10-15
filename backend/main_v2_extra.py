@@ -10,6 +10,7 @@
   /api/v2/devices/bind (POST), /bindings (GET), /bind/{device_id} (DELETE)
   /api/v2/vision/infer (POST - 简版, /full 已在 main_v2_routes)
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import os, json, time, uuid, secrets, base64, logging, calendar
 from typing import Optional, Dict, Any
 from fastapi import Request
@@ -22,12 +23,12 @@ from main import app
 log = logging.getLogger("v2_extra")
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(ROOT, "fitness.db")
+DB_PATH = default_sqlite_path()
 
 
 def _db():
     import sqlite3
-    c = sqlite3.connect(DB_PATH, timeout=10)
+    c = connect_database(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
     return c
 
@@ -41,35 +42,9 @@ def _unauth():
     return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
 
-def _rep_image_urls(row: Dict[str, Any], include_frames: bool = True) -> Dict[str, Any]:
-    """Build public /repdata URLs for one rep's saved keyframes/clip frames."""
-    keyframes = []
-    for key in ("start_frame", "peak_frame", "end_frame"):
-        v = row.get(key)
-        if not v:
-            continue
-        p = str(v).replace("\\", "/")
-        idx = p.find("data/")
-        keyframes.append("/repdata/" + p[idx + 5:] if idx >= 0 else p)
-
-    frames = []
-    frame_count = 0
-    clip_dir = row.get("clip_dir")
-    if clip_dir:
-        p = str(clip_dir).replace("\\", "/")
-        idx = p.find("data/")
-        if idx >= 0:
-            sub = p[idx + 5:]
-            d = os.path.join(ROOT, p[idx:])
-        else:
-            sub = p
-            d = os.path.join(ROOT, p)
-        if os.path.isdir(d):
-            names = [fn for fn in sorted(os.listdir(d)) if fn.lower().endswith((".jpg", ".jpeg", ".png"))]
-            frame_count = len(names)
-            if include_frames:
-                frames = [f"/repdata/{sub}/{fn}" for fn in names]
-    return {"keyframes": keyframes, "frames": frames, "frame_count": frame_count, "has_images": bool(keyframes or frame_count)}
+def _rep_image_urls(row: Dict[str, Any], user_id: int, include_frames: bool = True, conn=None) -> Dict[str, Any]:
+    from storage.media import rep_urls
+    return rep_urls(row,user_id,include_frames,conn)
 
 
 def _period_since(period: str) -> float:
@@ -362,7 +337,7 @@ def _stats_summary(user_id: int, since_ts: float):
             "SELECT s.session_id, s.exercise_type, s.start_time, s.end_time, "
             "       s.total_reps, s.avg_form_score, s.status, s.device_id "
             "FROM sessions s "
-            "WHERE s.user_id=? AND s.start_time>=? ORDER BY s.start_time DESC LIMIT 20",
+            "WHERE s.user_id=CAST(? AS TEXT) AND s.start_time>=? ORDER BY s.start_time DESC LIMIT 20",
             (str(user_id), since_ts)
         ).fetchall()
         sess_list = [dict(r) for r in sess_rows]
@@ -415,7 +390,7 @@ async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit:
         rows = c.execute(
             "SELECT session_id, device_id, user_id, exercise_type, start_time, end_time, "
             "       total_reps, avg_form_score, status "
-            "FROM sessions WHERE user_id=? ORDER BY start_time DESC LIMIT ?",
+            "FROM sessions WHERE user_id=CAST(? AS TEXT) ORDER BY start_time DESC LIMIT ?",
             (str(target_uid), limit)
         ).fetchall()
         return JSONResponse({"sessions": [dict(r) for r in rows]})
@@ -562,7 +537,7 @@ async def x_training_data(req: Request, period: str = "week"):
         ).fetchall()
         sess_rows = c.execute(
             "SELECT session_id, device_id, exercise_type, start_time, end_time, total_reps, avg_form_score, status "
-            "FROM sessions WHERE user_id=? AND start_time>=? ORDER BY start_time DESC LIMIT 80",
+            "FROM sessions WHERE user_id=CAST(? AS TEXT) AND start_time>=? ORDER BY start_time DESC LIMIT 80",
             (str(u["user_id"]), since)
         ).fetchall()
         sessions = []
@@ -577,7 +552,7 @@ async def x_training_data(req: Request, period: str = "week"):
             reps = []
             for rr in rep_rows:
                 rd = dict(rr)
-                images = _rep_image_urls(rd, include_frames=False)
+                images = _rep_image_urls(rd, u["user_id"], include_frames=False, conn=c)
                 reps.append({
                     "id": rd.get("id"),
                     "rep_index": rd.get("rep_index"),
@@ -630,13 +605,13 @@ async def x_training_rep_images(rep_id: int, req: Request):
             "       r.peak_angle, r.duration_s, r.feedback, r.ts, r.true_label, r.error_type, "
             "       r.start_frame, r.peak_frame, r.end_frame, r.clip_dir "
             "FROM rep_scores r JOIN sessions s ON s.session_id=r.session_id "
-            "WHERE r.id=? AND s.user_id=?",
+            "WHERE r.id=? AND s.user_id=CAST(? AS TEXT)",
             (rep_id, str(u["user_id"]))
         ).fetchone()
         if not row:
             return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
         d = dict(row)
-        images = _rep_image_urls(d, include_frames=True)
+        images = _rep_image_urls(d, u["user_id"], include_frames=True, conn=c)
         rep = {k: d.get(k) for k in ("id", "session_id", "rep_index", "exercise", "total", "depth", "control", "symmetry", "peak_angle", "duration_s", "feedback", "ts", "true_label", "error_type")}
         return JSONResponse({"ok": True, "rep": rep, **images})
     finally:

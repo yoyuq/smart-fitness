@@ -1,4 +1,5 @@
-﻿import os, sys, uuid
+from storage.database import connect as connect_database
+import os, sys, uuid
 from fastapi.testclient import TestClient
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -248,7 +249,7 @@ def test_fitness_agent_layered_memory_tool_requires_approval_and_groups(monkeypa
     import sqlite3
     import fitness_agent
     from main_v2_extra import DB_PATH
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
         snapshot = fitness_agent.execute_tool(conn, int(auth.verify_token(token)["user_id"]), "get_memory_snapshot", {"limit_per_kind": 3})

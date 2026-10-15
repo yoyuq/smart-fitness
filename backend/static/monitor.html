@@ -157,6 +157,15 @@
 
 <script>
 const API = "";  // 同源
+// Use the same login as /app for private training media.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, options = {}) => {
+  const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+  const headers = new Headers(options.headers || (input instanceof Request ? input.headers : undefined));
+  const token = localStorage.getItem('auth_token');
+  if (token && url.origin === location.origin) headers.set('Authorization', 'Bearer ' + token);
+  return nativeFetch(input, {...options, headers});
+};
 const DOWN=130, UP=145, ZLO=40, ZHI=100;
 const COL={green:"#2DE39E",red:"#FF6B6B",cyan:"#35B8FF",orange:"#FFB34D",sub:"#9AA8B6",grid:"#2A3744",txt:"#F2F6FA",panel:"#18222E"};
 // MediaPipe 33 点主要连线

@@ -60,6 +60,8 @@ def _default_frame_roots() -> List[str]:
         # image back to Stage 1 vision providers without "not inside allowed roots".
         os.path.join(backend_dir, "data", "collages"),
     ]
+    from storage.media import media_root
+    roots.extend(str(media_root()/kind) for kind in ("rep_frames","rep_clips","monitor","collages"))
     extra = os.environ.get("AI_AGENT_VISION_FRAME_ROOTS", "")
     for p in extra.split(os.pathsep):
         p = p.strip()
@@ -70,8 +72,8 @@ def _default_frame_roots() -> List[str]:
 
 def _is_inside_root(path: str, root: str) -> bool:
     try:
-        p = os.path.abspath(path)
-        r = os.path.abspath(root)
+        p = os.path.realpath(path)
+        r = os.path.realpath(root)
         return os.path.commonpath([p, r]) == r
     except Exception:
         return False

@@ -12,6 +12,7 @@ Provides:
   - Pose data processing and storage
   - WebSocket for live client updates
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source, initialize
 
 import asyncio
 import json
@@ -20,8 +21,9 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import sqlite3
@@ -97,13 +99,17 @@ if os.path.isdir(_STATIC_DIR):
     async def pwa_redirect():
         return RedirectResponse("/static/index.html")
 
+from storage.media_routes import router as media_router
+app.include_router(media_router)
+
 # ---------- Database Setup ----------
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "fitness.db")
+DB_PATH = default_sqlite_path()
 
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    initialize(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS devices (
@@ -188,12 +194,21 @@ def start_mqtt():
 
 @app.on_event("startup")
 async def startup():
-    start_mqtt()
-    print("[Backend] Server started - MQTT handler active")
+    if os.getenv('ENV','').lower()=='production':
+        secret=os.getenv('JWT_SECRET','')
+        if len(secret)<32 or secret=='smart-fitness-dev-secret-change-in-prod':raise RuntimeError('Production JWT_SECRET must be private and at least 32 characters')
+        from storage.media import MediaService
+        MediaService().signing_key()
+    from storage.media_jobs import start as start_media_jobs
+    start_media_jobs()
+    if os.getenv('MQTT_ENABLED','true').lower() not in ('false','0','no'):
+        start_mqtt()
+    print("[Backend] Server started")
     # Pose engine warmup (避免第一次推理冷启动 2s 卡顿)
     try:
         import asyncio
         async def _warmup():
+            if os.getenv('POSE_WARMUP_ENABLED','true').lower() in ('false','0','no'):return
             try:
                 import sys, os
                 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ml_pose"))
@@ -222,6 +237,8 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    from storage.media_jobs import stop as stop_media_jobs
+    await stop_media_jobs()
     try:
         from fitness_agent.background_scheduler import stop_background_scheduler
         await stop_background_scheduler()
@@ -262,6 +279,37 @@ class SensorReading(BaseModel):
     accel_x: Optional[float] = None
     accel_y: Optional[float] = None
     accel_z: Optional[float] = None
+
+
+class TelemetryBatch(BaseModel):
+    poses: List[PoseFrame] = []
+    sensors: List[SensorReading] = []
+
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith('/api/sessions/') and request.url.path.endswith('/telemetry/batch'):
+        # Invalid numeric input (e.g. NaN for an integer) must not be echoed
+        # into strict JSON serialization and turn a validation error into 500.
+        details=[{key:error[key] for key in ('loc','msg','type')} for error in exc.errors()]
+        return JSONResponse({'detail':details},status_code=422)
+    return await request_validation_exception_handler(request,exc)
+
+
+@app.post('/api/sessions/{session_id}/telemetry/batch')
+async def telemetry_batch(session_id: str, batch: TelemetryBatch, request: Request):
+    import auth
+    from storage.telemetry import write_batch
+    header=request.headers.get('authorization','')
+    user=auth.verify_token(header[7:]) if header.startswith('Bearer ') else None
+    if not user:return JSONResponse({'error':'unauthorized'},status_code=401)
+    try:return write_batch(session_id,user['user_id'],batch.poses,batch.sensors)
+    except PermissionError:return JSONResponse({'error':'session not found'},status_code=404)
+    except ValueError as exc:return JSONResponse({'error':str(exc)},status_code=400)
 
 
 class FeedbackMessage(BaseModel):
@@ -337,7 +385,7 @@ async def health():
 
 
 def get_active_device_count() -> int:
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM devices WHERE status='online' AND last_seen > ?",
               (time.time() - 120,))
@@ -350,11 +398,11 @@ def get_active_device_count() -> int:
 
 @app.post("/api/devices/register")
 async def register_device(device: DeviceRegister):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "INSERT OR REPLACE INTO devices (device_id, name, firmware_version, last_seen, status) "
-        "VALUES (?, ?, ?, ?, 'online')",
+        "INSERT INTO devices (device_id, name, firmware_version, last_seen, status) "
+        "VALUES (?, ?, ?, ?, 'online') ON CONFLICT(device_id) DO UPDATE SET name=excluded.name, firmware_version=excluded.firmware_version, last_seen=excluded.last_seen, status=excluded.status",
         (device.device_id, device.name or device.device_id,
          device.firmware_version or "unknown", time.time())
     )
@@ -365,7 +413,7 @@ async def register_device(device: DeviceRegister):
 
 @app.get("/api/devices")
 async def list_devices():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM devices ORDER BY last_seen DESC")
     rows = c.fetchall()
@@ -385,7 +433,7 @@ async def list_devices():
 
 @app.get("/api/devices/{device_id}")
 async def get_device(device_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM devices WHERE device_id=?", (device_id,))
     row = c.fetchone()
@@ -407,7 +455,7 @@ async def get_device(device_id: str):
 @app.post("/api/sessions/start")
 async def start_session(session: SessionStart):
     session_id = str(uuid.uuid4())
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO sessions (session_id, device_id, user_id, exercise_type, start_time, status) "
@@ -422,7 +470,7 @@ async def start_session(session: SessionStart):
 
 @app.post("/api/sessions/{session_id}/end")
 async def end_session(session_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "UPDATE sessions SET end_time=?, status='completed' WHERE session_id=?",
@@ -438,7 +486,7 @@ async def end_session(session_id: str):
 
 @app.get("/api/sessions")
 async def list_sessions(limit: int = Query(20, ge=1, le=100)):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM sessions ORDER BY start_time DESC LIMIT ?", (limit,))
     rows = c.fetchall()
@@ -461,7 +509,7 @@ async def list_sessions(limit: int = Query(20, ge=1, le=100)):
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,))
     row = c.fetchone()
@@ -485,7 +533,7 @@ async def get_session(session_id: str):
 
 @app.post("/api/sessions/{session_id}/pose")
 async def submit_pose_data(session_id: str, frame: PoseFrame):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO pose_data (session_id, timestamp, exercise_type, rep_count, form_score, angles_json) "
@@ -511,7 +559,7 @@ async def submit_pose_data(session_id: str, frame: PoseFrame):
 
 @app.post("/api/sessions/{session_id}/sensor")
 async def submit_sensor_data(session_id: str, reading: SensorReading):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO sensor_data (session_id, timestamp, heart_rate, hr_confidence, "
@@ -528,7 +576,7 @@ async def submit_sensor_data(session_id: str, reading: SensorReading):
 
 @app.post("/api/sessions/{session_id}/feedback")
 async def submit_feedback(session_id: str, feedback: FeedbackMessage):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO feedback_log (session_id, timestamp, severity, message) "
@@ -552,7 +600,7 @@ async def submit_feedback(session_id: str, feedback: FeedbackMessage):
 
 @app.get("/api/sessions/{session_id}/analytics")
 async def get_session_analytics(session_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_database(DB_PATH)
     c = conn.cursor()
 
     c.execute("SELECT avg(form_score), count(*) FROM pose_data WHERE session_id=?",

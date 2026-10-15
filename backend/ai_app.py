@@ -6,6 +6,7 @@
 启动:
     python -m uvicorn ai_app:app --host 0.0.0.0 --port 8081
 """
+from storage.database import connect as connect_database, default_sqlite_path, connection_source
 import os, sqlite3, time, logging
 from typing import Optional
 from fastapi import FastAPI, Request
@@ -24,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ai_app")
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(ROOT, "fitness.db")
+DB_PATH = default_sqlite_path()
 
 app = FastAPI(title="Smart Fitness AI Planner", version="1.0")
 app.add_middleware(
@@ -34,7 +35,7 @@ app.add_middleware(
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = connect_database(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -65,6 +66,12 @@ def root():
 
 @app.get("/api/ai/health")
 def health():
+    db_ready=False
+    try:
+        conn=get_db()
+        try:db_ready=conn.execute('SELECT 1').fetchone()[0]==1
+        finally:conn.close()
+    except Exception:pass
     s = ai_planner.provider_status()
     return {
         "ok": True,
@@ -72,7 +79,7 @@ def health():
         "deepseek_key_set": s["deepseek_key_set"],
         "volc_key_set": s["volc_key_set"],
         "model": s["volc_model"] if s["volc_key_set"] else s["deepseek_model"],
-        "db_exists": os.path.exists(DB_PATH),
+        "db_exists": db_ready,
     }
 
 

@@ -1,0 +1,15 @@
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/*.db
+**/*.db-*
+**/*.pem
+**/*.key
+**/data
+**/__pycache__
+**/.pytest_cache
+datasets
+work
+.venv
+venv

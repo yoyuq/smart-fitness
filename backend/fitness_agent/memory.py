@@ -1,3 +1,4 @@
+from storage.database import column_names
 """Layered long-term memory for the Smart Fitness Agent.
 
 This module keeps compatibility with the existing ``coach_memory`` table while
@@ -52,7 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_coach_memory_user_created
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
-    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    cols = column_names(conn, table)
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
@@ -119,7 +120,7 @@ def _parse_json(raw: Any, default: Any):
 
 
 def _row_to_memory(row) -> Dict[str, Any]:
-    if isinstance(row, sqlite3.Row):
+    if hasattr(row, "keys"):
         keys = set(row.keys())
         note = row["note"]
         kind = row["kind"] if "kind" in keys and row["kind"] else row["category"]

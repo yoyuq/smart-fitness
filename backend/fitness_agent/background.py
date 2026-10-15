@@ -109,10 +109,10 @@ def _insert_item(
     item_id = "bg_" + uuid.uuid4().hex[:16]
     cur = conn.execute(
         """
-        INSERT OR IGNORE INTO agent_background_items (
+        INSERT INTO agent_background_items (
             item_id, user_id, job, kind, title, message, payload_json, status,
             requires_approval, dedupe_key, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?) ON CONFLICT DO NOTHING
         """,
         (
             item_id,
