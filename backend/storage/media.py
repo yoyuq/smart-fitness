@@ -62,8 +62,8 @@ class CosStore:
             from qcloud_cos import CosConfig,CosS3Client
             required=('COS_REGION','COS_SECRET_ID','COS_SECRET_KEY')
             if any(not os.getenv(k) for k in required):raise ValueError('COS region and credentials are not configured')
-            cfg=CosConfig(Region=os.environ['COS_REGION'],SecretId=os.environ['COS_SECRET_ID'],SecretKey=os.environ['COS_SECRET_KEY'],Token=os.getenv('COS_SESSION_TOKEN'),Scheme='https',Timeout=10,MaxRetry=0)
-            client=CosS3Client(cfg)
+            cfg=CosConfig(Region=os.environ['COS_REGION'],SecretId=os.environ['COS_SECRET_ID'],SecretKey=os.environ['COS_SECRET_KEY'],Token=os.getenv('COS_SESSION_TOKEN'),Scheme='https',Timeout=10)
+            client=CosS3Client(cfg,retry=0)
         self.client=client
     def put(self,key,data):
         self.client.put_object(Bucket=self.bucket,Key=resource_key(key),Body=data,ContentType=mimetypes.guess_type(key)[0] or 'application/octet-stream',EnableMD5=True,ACL='private')
@@ -102,30 +102,55 @@ class MediaService:
         row=conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(parts[1],)).fetchone()
         try:return int(row[0]) if row and row[0] is not None else None
         except (ValueError,TypeError):return None
+    def prefix_deleted(self,conn,key):
+        parts=resource_key(key).split('/')
+        for end in range(2,len(parts)):
+            marker='/'.join(parts[:end])+'/_prefix_tombstone'
+            row=self.row(conn,marker)
+            if row and row['status']=='deleted':return True
+        return False
     def authorize(self,conn,key,user_id):
         if self.owner(conn,key)!=int(user_id):raise PermissionError('Media does not belong to current user')
         row=self.row(conn,key)
-        if row and row['status'] in ('delete_pending','deleted'):raise PermissionError('Media was deleted')
+        if self.prefix_deleted(conn,key) or (row and row['status'] in ('delete_pending','deleted')):raise PermissionError('Media was deleted')
     def publish(self,key,data,user_id,session_id=None):
         key=resource_key(key)
         if len(data)>MAX_BYTES:raise ValueError('Media object exceeds size limit')
+        if '_prefix_tombstone' in key.split('/'):raise ValueError('Reserved media key')
         digest=hashlib.sha256(data).hexdigest();now=time.time()
         conn=connect()
         try:
             if session_id:
                 session=conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(session_id,)).fetchone()
                 if not session or str(session[0])!=str(user_id):raise PermissionError('Media session owner mismatch')
-            # Claim immutable content before touching a shared local path.
+            if self.prefix_deleted(conn,key):raise ValueError('Deleted media prefix cannot be reused')
+            # Staging is not uploadable until durable bytes exist.
             conn.execute('INSERT INTO media_objects(resource_key,user_id,session_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(resource_key) DO NOTHING',
-                (key,int(user_id),session_id,self.backend,'pending',0,digest,len(data),now,now))
+                (key,int(user_id),session_id,self.backend,'staging',0,digest,len(data),now,now))
             row=self.row(conn,key)
             if row['user_id']!=int(user_id) or row['sha256']!=digest:raise ValueError('Media key already belongs to different immutable content')
             if row['status'] in ('deleted','delete_pending'):raise ValueError('Deleted media keys cannot be reused')
+            if row['backend']!=self.backend:
+                conn.execute("UPDATE media_objects SET backend=?,status='staging',attempts=0,error_type=NULL,updated_at=? WHERE resource_key=? AND status NOT IN ('deleted','delete_pending')",(self.backend,now,key))
+                row['backend']=self.backend
             conn.commit()
         except Exception:
             conn.rollback();raise
         finally:conn.close()
         atomic_write(key,data)
+        conn=connect()
+        try:
+            if self.prefix_deleted(conn,key):
+                conn.execute("UPDATE media_objects SET status='delete_pending',attempts=0,updated_at=? WHERE resource_key=? AND status NOT IN ('deleted','delete_pending')",(time.time(),key))
+            else:
+                conn.execute("UPDATE media_objects SET status='pending',attempts=CASE WHEN error_type='staging_incomplete' THEN 0 ELSE attempts END,error_type=NULL,updated_at=? WHERE resource_key=? AND (status='staging' OR (status='failed' AND error_type='staging_incomplete'))",(time.time(),key))
+            conn.commit()
+            deleted=self.row(conn,key)['status'] in ('deleted','delete_pending')
+        finally:conn.close()
+        if deleted:
+            self.retry_key(key)
+            local_path(key).unlink(missing_ok=True)
+            raise ValueError('Media was deleted while publishing')
         # Camera ingestion waits for durable local bytes, never for cloud I/O.
         if row['backend']=='local':self.retry_key(key)
         return key
@@ -134,6 +159,8 @@ class MediaService:
         try:
             row=self.row(conn,key)
             if not row:raise ValueError('Media object is not catalogued')
+            if self.prefix_deleted(conn,key) and row['status'] not in ('deleted','delete_pending'):
+                conn.execute("UPDATE media_objects SET status='delete_pending',attempts=0,updated_at=? WHERE resource_key=? AND status NOT IN ('deleted','delete_pending')",(time.time(),key));conn.commit();row=self.row(conn,key)
             if row['status'] in ('ready','deleted'):return True
             if row['status']=='delete_pending':
                 for _ in range(3):
@@ -147,11 +174,19 @@ class MediaService:
                         conn.execute('UPDATE media_objects SET error_type=?,updated_at=? WHERE resource_key=?',(type(exc).__name__,time.time(),key));conn.commit()
                 return False
             path=local_path(key)
+            if row['status']=='staging':
+                # Recover a crash after atomic rename, before catalog publication.
+                if not path.is_file():
+                    if time.time()-row['updated_at']>60:
+                        conn.execute("UPDATE media_objects SET status='failed',attempts=9,error_type='staging_incomplete',updated_at=? WHERE resource_key=? AND status='staging'",(time.time(),key));conn.commit()
+                    return False
+                if path.stat().st_size<=MAX_BYTES and hashlib.sha256(path.read_bytes()).hexdigest()==row['sha256']:
+                    conn.execute("UPDATE media_objects SET status='pending',updated_at=? WHERE resource_key=? AND status='staging'",(time.time(),key));conn.commit();row=self.row(conn,key)
             if not path.is_file() or path.stat().st_size>MAX_BYTES:
-                conn.execute("UPDATE media_objects SET status='failed',attempts=9,error_type='cache_missing',updated_at=? WHERE resource_key=? AND status!='ready'",(time.time(),key));conn.commit();return False
+                conn.execute("UPDATE media_objects SET status='failed',attempts=9,error_type='cache_missing',updated_at=? WHERE resource_key=? AND status IN ('pending','failed','staging')",(time.time(),key));conn.commit();return False
             data=path.read_bytes()
             if hashlib.sha256(data).hexdigest()!=row['sha256']:
-                conn.execute("UPDATE media_objects SET status='failed',attempts=9,error_type='cache_checksum',updated_at=? WHERE resource_key=?",(time.time(),key));conn.commit();return False
+                conn.execute("UPDATE media_objects SET status='failed',attempts=9,error_type='cache_checksum',updated_at=? WHERE resource_key=? AND status IN ('pending','failed','staging')",(time.time(),key));conn.commit();return False
             for _ in range(3):
                 if row['attempts']>=9:break
                 # Durable total bound survives restarts; no hidden SDK retries.
@@ -168,12 +203,17 @@ class MediaService:
                         return current['status']=='ready'
                     return True
                 except Exception as exc:
-                    conn.execute("UPDATE media_objects SET status='failed',error_type=?,updated_at=? WHERE resource_key=? AND status!='ready'",(type(exc).__name__,time.time(),key));conn.commit()
+                    conn.execute("UPDATE media_objects SET status='failed',error_type=?,updated_at=? WHERE resource_key=? AND status IN ('pending','failed')",(type(exc).__name__,time.time(),key));conn.commit()
+                    current=self.row(conn,key)
+                    if current['status'] in ('deleted','delete_pending'):
+                        # Timeout may mean PUT succeeded remotely after DELETE.
+                        conn.execute("UPDATE media_objects SET status='delete_pending',attempts=0,error_type='late_upload_cleanup',updated_at=? WHERE resource_key=? AND status='deleted'",(time.time(),key));conn.commit()
+                        return False
             return False
         finally:conn.close()
     def retry_pending(self,limit=25,stop_event=None):
         conn=connect()
-        try:keys=[r[0] for r in conn.execute("SELECT resource_key FROM media_objects WHERE status IN ('pending','failed','delete_pending') AND attempts<9 ORDER BY updated_at LIMIT ?",(min(100,max(1,int(limit))),)).fetchall()]
+        try:keys=[r[0] for r in conn.execute("SELECT resource_key FROM media_objects WHERE status IN ('staging','pending','failed','delete_pending') AND attempts<9 ORDER BY updated_at LIMIT ?",(min(100,max(1,int(limit))),)).fetchall()]
         finally:conn.close()
         checked=ready=0
         for key in keys:
@@ -204,20 +244,44 @@ class MediaService:
             if row and row['status']=='deleted':return True
             already_pending=row and row['status']=='delete_pending'
             if not row:
-                path=self.materialize(key,user_id,conn);data=path.read_bytes();now=time.time()
+                path=local_path(key)
+                if not path.is_file():
+                    legacy=(BACKEND_ROOT/'data'/key).resolve()
+                    if legacy.is_relative_to((BACKEND_ROOT/'data').resolve()):path=legacy
+                data=path.read_bytes();now=time.time()
                 conn.execute("INSERT INTO media_objects(resource_key,user_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (?,?,'local','delete_pending',0,?,?,?,?) ON CONFLICT(resource_key) DO NOTHING",(key,int(user_id),hashlib.sha256(data).hexdigest(),len(data),now,now))
             if not already_pending:
                 conn.execute("UPDATE media_objects SET status='delete_pending',attempts=0,updated_at=? WHERE resource_key=?",(time.time(),key));conn.commit()
         finally:
             if owned:conn.close()
         return self.retry_key(key)
+    def delete_prefix(self,prefix,user_id,conn=None):
+        prefix=resource_key(prefix).rstrip('/');owned=conn is None;conn=conn or connect()
+        try:
+            if self.owner(conn,prefix+'/placeholder.jpg')!=int(user_id):raise PermissionError('Media prefix owner mismatch')
+            now=time.time();marker=prefix+'/_prefix_tombstone'
+            conn.execute("INSERT INTO media_objects(resource_key,user_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (?,?,'local','deleted',0,?,0,?,?) ON CONFLICT(resource_key) DO NOTHING",(marker,int(user_id),hashlib.sha256(b'').hexdigest(),now,now));conn.commit()
+            escaped=prefix.replace('!','!!').replace('%','!%').replace('_','!_')+'/%'
+            keys=[r[0] for r in conn.execute("SELECT resource_key FROM media_objects WHERE user_id=? AND resource_key LIKE ? ESCAPE '!' AND status!='deleted'",(int(user_id),escaped)).fetchall()]
+            directory=local_path(prefix)
+            if directory.is_dir():keys+= [prefix+'/'+p.name for p in directory.iterdir() if p.is_file() and p.suffix.lower() in ('.jpg','.jpeg','.png')]
+            pending=0
+            for key in set(keys):
+                try:pending+=not self.delete(key,user_id,conn)
+                except FileNotFoundError:pass
+            return pending
+        finally:
+            if owned:conn.close()
     def keys(self,prefix,user_id,conn=None):
         prefix=resource_key(prefix).rstrip('/');owned=conn is None;conn=conn or connect()
         try:
             self.authorize(conn,prefix+'/placeholder.jpg',user_id)
             paths=set()
             directory=local_path(prefix)
-            if directory.is_dir():paths.update(prefix+'/'+p.name for p in directory.iterdir() if p.is_file() and p.suffix.lower() in ('.jpg','.jpeg','.png'))
+            directories=(directory,(BACKEND_ROOT/'data'/prefix).resolve())
+            for candidate in directories:
+                if candidate.is_relative_to(media_root()) or candidate.is_relative_to((BACKEND_ROOT/'data').resolve()):
+                    if candidate.is_dir():paths.update(prefix+'/'+p.name for p in candidate.iterdir() if p.is_file() and p.suffix.lower() in ('.jpg','.jpeg','.png'))
             if table_exists(conn,'media_objects'):
                 escaped=prefix.replace('!','!!').replace('%','!%').replace('_','!_')+'/%'
                 rows=conn.execute("SELECT resource_key FROM media_objects WHERE user_id=? AND status NOT IN ('deleted','delete_pending') AND resource_key LIKE ? ESCAPE '!' ORDER BY resource_key LIMIT 1001",(int(user_id),escaped)).fetchall()
@@ -232,11 +296,14 @@ class MediaService:
             if owned:conn.close()
     def clip(self,prefix,user_id,conn=None):
         keys=self.keys(prefix,user_id,conn)
-        for key in keys:self.materialize(key,user_id,conn)
+        for key in keys:
+            path=self.materialize(key,user_id,conn)
+            if path!=local_path(key):atomic_write(key,path.read_bytes())
         return local_path(prefix)
     def signing_key(self):
-        secret=os.getenv('MEDIA_SIGNING_SECRET') or os.getenv('JWT_SECRET') or 'smart-fitness-local-development-only'
-        if os.getenv('ENV')=='production' and len(secret)<32:raise ValueError('Production media signing secret must have at least 32 characters')
+        configured=os.getenv('MEDIA_SIGNING_SECRET') or os.getenv('JWT_SECRET')
+        secret=configured or 'smart-fitness-local-development-only'
+        if os.getenv('ENV','').lower()=='production' and (not configured or secret=='smart-fitness-local-development-only' or len(secret)<32):raise ValueError('Production media signing secret must have at least 32 characters')
         return secret.encode()
     def signature(self,key,user_id,expires):
         value=f'{int(user_id)}\n{int(expires)}\n{resource_key(key)}'.encode()

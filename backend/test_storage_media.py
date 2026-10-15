@@ -158,3 +158,125 @@ def test_real_training_keyframes_clip_playback_and_ai_reads(assets):
     removed=client.post('/api/v2/monitor/rep_delete',headers=headers,json={'rep_id':rep_id})
     assert removed.status_code==200 and removed.json()['ok']
     assert client.get(clip.json()['frames'][0]).status_code in (403,404)
+
+def test_publish_staging_excludes_inflight_writer_and_recovers_crash(assets,monkeypatch):
+    import threading
+    import storage.media as media
+    uid,sid,data,_=assets;monkeypatch.setenv('MEDIA_BACKEND','cos')
+    sdk=FakeSdk();service=MediaService(CosStore(sdk,'test'));key=f'rep_frames/{sid}/staging.jpg'
+    entered=threading.Event();release=threading.Event();real=media.atomic_write;errors=[]
+    def paused(key,data):
+        entered.set();assert release.wait(10);return real(key,data)
+    def writer():
+        try:service.publish(key,data,uid,sid)
+        except Exception as exc:errors.append(exc)
+    monkeypatch.setattr(media,'atomic_write',paused)
+    thread=threading.Thread(target=writer);thread.start();assert entered.wait(10)
+    assert not service.retry_key(key) and sdk.calls==0
+    release.set();thread.join(10);assert not thread.is_alive() and not errors
+    assert service.retry_key(key) and sdk.calls==1
+    # Persisted complete bytes with staging metadata after an interrupted writer.
+    conn=connect();conn.execute("UPDATE media_objects SET status='staging',attempts=0 WHERE resource_key=?",(key,));conn.commit();conn.close()
+    assert MediaService(CosStore(sdk,'test')).retry_key(key)
+
+
+def test_timeout_after_delete_cannot_resurrect(assets,monkeypatch):
+    uid,sid,data,_=assets;monkeypatch.setenv('MEDIA_BACKEND','cos')
+    class RacingSdk(FakeSdk):
+        def put_object(self,**kwargs):
+            self.calls+=1;service.delete(kwargs['Key'],uid)
+            self.objects[kwargs['Key']]=kwargs['Body']
+            raise TimeoutError('ambiguous late PUT')
+    sdk=RacingSdk();service=MediaService(CosStore(sdk,'test'));key=f'rep_frames/{sid}/timeout.jpg'
+    service.publish(key,data,uid,sid);assert not service.retry_key(key) and sdk.calls==1
+    with pytest.raises(PermissionError):service.url(key,uid)
+    assert service.retry_key(key) and key not in sdk.objects
+
+
+def test_production_requires_private_signing_secret(monkeypatch):
+    monkeypatch.setenv('ENV','production');monkeypatch.delenv('MEDIA_SIGNING_SECRET',raising=False);monkeypatch.delenv('JWT_SECRET',raising=False)
+    with pytest.raises(ValueError):MediaService().signing_key()
+    monkeypatch.setenv('JWT_SECRET','smart-fitness-local-development-only')
+    with pytest.raises(ValueError):MediaService().signing_key()
+    monkeypatch.setenv('MEDIA_SIGNING_SECRET','test-only-secret-which-is-at-least-32-characters')
+    assert MediaService().signing_key()
+
+
+def test_real_cos_sdk_constructor_no_network(monkeypatch):
+    for name,value in {'COS_BUCKET':'test-1234','COS_REGION':'ap-beijing','COS_SECRET_ID':'synthetic-id','COS_SECRET_KEY':'synthetic-key'}.items():monkeypatch.setenv(name,value)
+    store=CosStore();assert store.client is not None
+
+
+def test_prefix_delete_blocks_frames_not_yet_published(assets,monkeypatch):
+    uid,sid,data,_=assets;service=MediaService();prefix=f'rep_clips/{sid}/late'
+    service.publish(prefix+'/f000.jpg',data,uid,sid)
+    assert service.delete_prefix(prefix,uid)==0
+    with pytest.raises(ValueError):service.publish(prefix+'/f001.jpg',data,uid,sid)
+    with pytest.raises(PermissionError):service.clip(prefix,uid)
+
+
+def test_legacy_clip_root_materializes_frames(assets):
+    from storage.database import BACKEND_ROOT
+    uid,sid,data,_=assets;prefix=f'rep_clips/{sid}/legacy';old=BACKEND_ROOT/'data'/prefix
+    old.mkdir(parents=True,exist_ok=True)
+    try:
+        (old/'f000.jpg').write_bytes(data);(old/'f001.jpg').write_bytes(data)
+        service=MediaService();assert len(service.keys(prefix,uid))==2
+        clip=service.clip(prefix,uid);assert (clip/'f000.jpg').read_bytes()==data
+    finally:
+        for path in old.glob('*.jpg'):path.unlink()
+        old.rmdir();old.parent.rmdir()
+
+
+def test_inference_autorevive_persists_owner_before_frames(assets):
+    from main import app
+    import main_v2_routes as routes
+    uid,_,data,headers=assets;device='revive-'+uuid.uuid4().hex
+    response=TestClient(app).post('/api/v2/vision/infer/full',headers=headers,json={'device_id':device,'user_id':uid+99,'exercise':'squat'})
+    assert response.status_code==200
+    sid=routes.active_trainings[device]['session_id'];conn=connect()
+    assert conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(sid,)).fetchone()[0]==str(uid);conn.close()
+    routes._buffer_frame(device,100,data,session_id=sid)
+    assert routes._save_rep_keyframes(device,sid,{'rep_index':1,'start_ts':100})['start_frame']
+
+def test_stop_refuses_to_certify_live_thread(monkeypatch):
+    import asyncio
+    import threading
+    import storage.media_jobs as jobs
+    async def scenario():
+        release=threading.Event();entered=threading.Event()
+        def blocked():entered.set();release.wait(10)
+        task=asyncio.create_task(asyncio.to_thread(blocked))
+        while not entered.is_set():await asyncio.sleep(.001)
+        jobs._task=task;jobs._stop=asyncio.Event();jobs._thread_stop=threading.Event()
+        real=asyncio.wait_for
+        async def short_wait(awaitable,timeout):return await real(awaitable,timeout=.01)
+        with monkeypatch.context() as patch:
+            patch.setattr(jobs.asyncio,'wait_for',short_wait)
+            with pytest.raises(RuntimeError,match='still active'):await jobs.stop()
+        assert jobs._task is task and not task.done()
+        release.set();await jobs.stop();assert jobs._task is None
+    asyncio.run(scenario())
+
+def test_real_clip_writer_cancelled_by_rep_delete(assets,monkeypatch):
+    import threading
+    import main_v2_routes as routes
+    from main import app
+    uid,sid,data,headers=assets;device='clip-race-'+uuid.uuid4().hex
+    for i in range(3):routes._buffer_frame(device,100+i,data,session_id=sid)
+    prefix=f'rep_clips/{sid}/racing';conn=connect()
+    cur=conn.execute('INSERT INTO rep_scores(session_id,rep_index,clip_dir,ts) VALUES (?,?,?,?)',(sid,1,prefix,102));rep_id=cur.lastrowid;conn.commit();conn.close()
+    entered=threading.Event();release=threading.Event();real=MediaService.publish;result=[]
+    def paused(self,key,*args,**kwargs):
+        if key.endswith('f001.jpg'):entered.set();assert release.wait(10)
+        return real(self,key,*args,**kwargs)
+    monkeypatch.setattr(MediaService,'publish',paused)
+    thread=threading.Thread(target=lambda:result.append(routes._save_rep_clip(device,sid,{'clip_id':'racing','rep_index':1,'start_ts':100,'end_ts':102})))
+    thread.start();assert entered.wait(10)
+    try:
+        response=TestClient(app).post('/api/v2/monitor/rep_delete',headers=headers,json={'rep_id':rep_id})
+        assert response.status_code==200 and response.json()['ok']
+    finally:release.set();thread.join(10)
+    assert not thread.is_alive() and result==[None]
+    with pytest.raises(PermissionError):MediaService().keys(prefix,uid)
+    assert not local_path(prefix+'/f001.jpg').exists()

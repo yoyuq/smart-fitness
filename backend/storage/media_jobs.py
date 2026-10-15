@@ -32,5 +32,8 @@ async def stop():
     if _thread_stop:_thread_stop.set()
     if _task:
         try:await asyncio.wait_for(asyncio.shield(_task),timeout=35)
-        except asyncio.TimeoutError:_task.cancel()
+        except asyncio.TimeoutError:
+            # Cancelling asyncio.to_thread does not stop its worker. Keep the
+            # task reachable and refuse to certify a stopped writer.
+            raise RuntimeError('Media writer still active; wait for process exit before cutover')
     _task=None;_stop=None;_thread_stop=None

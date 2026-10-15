@@ -468,8 +468,9 @@ async def rep_delete(req: Request):
         row=conn.execute("SELECT r.* FROM rep_scores r JOIN sessions s ON s.session_id=r.session_id WHERE r.id=? AND s.user_id=CAST(? AS TEXT)",(int(rep_id),user["user_id"])).fetchone()
         if not row:return JSONResponse({"ok":False},status_code=404)
         service=MediaService();keys={row[col] for col in ("start_frame","peak_frame","end_frame") if row[col]}
-        if row["clip_dir"]:keys.update(service.keys(row["clip_dir"],user["user_id"],conn))
-        pending=0
+        pending=service.delete_prefix(row["clip_dir"],user["user_id"],conn) if row["clip_dir"] else 0
+        for key in tuple(keys):
+            pending+=service.delete_prefix(str(key).replace('\\','/').rsplit('/',1)[0],user["user_id"],conn)
         for key in keys:
             try:pending+=not service.delete(key,user["user_id"],conn)
             except FileNotFoundError:pass
@@ -539,7 +540,14 @@ def _save_rep_clip(device_id: str, session_id: str, rep: Dict, max_frames: int =
     clip_id=rep.get("clip_id") or f"rep{rep.get('rep_index',0):03d}_{int((rep.get('ts') or time.time())*1000)}"
     prefix=f"rep_clips/{session_id}/{clip_id}"
     service=MediaService()
-    for i,(_,data) in enumerate(frames):service.publish(f"{prefix}/f{i:03d}.jpg",data,owner,session_id)
+    for i,(_,data) in enumerate(frames):
+        try:service.publish(f"{prefix}/f{i:03d}.jpg",data,owner,session_id)
+        except ValueError:
+            check=get_db()
+            try:
+                if service.prefix_deleted(check,f"{prefix}/f{i:03d}.jpg"):return None
+            finally:check.close()
+            raise
     return prefix
 
 
@@ -842,7 +850,14 @@ async def v2_vision_infer_full(req: Request):
         body_exercise = (body.get("exercise") or body.get("exercise_type") or "").strip() or None
         allow_auto_revive = not (device_id == _MON.get("device") and not _MON.get("recording"))
         if allow_auto_revive and device_id and body_user_id and body_exercise:
-            new_sid = f"sess_{body_user_id}_{int(time.time())}"
+            from uuid import uuid4
+            authenticated=_require_user(req)
+            if authenticated:body_user_id=authenticated['user_id']
+            new_sid = f"sess_{body_user_id}_{uuid4().hex[:12]}"
+            conn=get_db()
+            try:
+                conn.execute("INSERT INTO sessions(session_id,device_id,user_id,exercise_type,start_time,status) VALUES (?,?,?,?,?,?)",(new_sid,device_id,str(body_user_id),body_exercise,time.time(),'active'));conn.commit()
+            finally:conn.close()
             active_trainings[device_id] = {
                 "user_id": int(body_user_id),
                 "exercise": body_exercise,
