@@ -1,0 +1,87 @@
+name: Storage validation
+on:
+  push:
+    branches: ['workflow/storage-20261014/**']
+  pull_request:
+    paths: ['backend/**', 'deploy/storage*', '.github/workflows/storage-validation.yml']
+permissions:
+  contents: read
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fitness_test
+          POSTGRES_PASSWORD: ci-disposable-password
+          POSTGRES_DB: fitness_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U fitness_test -d fitness_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://fitness_test:ci-disposable-password@127.0.0.1:5432/fitness_test
+      DB_PATH: /tmp/fitness-storage-ci.db
+      MEDIA_DATA_ROOT: /tmp/fitness-media-ci
+      AI_AGENT_BACKGROUND_ENABLED: 'false'
+      MQTT_ENABLED: 'false'
+      POSE_WARMUP_ENABLED: 'false'
+      MEDIA_RETRY_ENABLED: 'false'
+      APP_TIMEZONE: Asia/Shanghai
+      PYTHONPATH: backend
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt pytest httpx
+      - run: pip check
+      - run: python -m storage upgrade
+        working-directory: backend
+      - name: PostgreSQL storage and business regression
+        run: >-
+          pytest -q backend/test_storage_config.py backend/test_storage_database.py
+          backend/test_storage_transfer.py backend/test_storage_media.py backend/test_storage_ops.py
+          backend/test_storage_process.py backend/test_fitness_agent_background.py
+          backend/test_fitness_agent_mcp.py backend/test_fitness_agent_api.py
+          backend/test_plan_edit_import.py backend/test_fitness_agent_vision_reps.py
+          backend/test_smart_frame_sampling.py backend/test_rep_quality_rules.py
+      - name: SQLite compatibility and process recovery
+        run: >-
+          env -u DATABASE_URL pytest -q backend/test_storage_config.py backend/test_storage_database.py
+          backend/test_storage_transfer.py backend/test_storage_media.py backend/test_storage_ops.py
+          backend/test_storage_process.py backend/test_fitness_agent_background.py
+          backend/test_fitness_agent_mcp.py backend/test_fitness_agent_api.py backend/test_plan_edit_import.py
+          backend/test_fitness_agent_vision_reps.py backend/test_smart_frame_sampling.py backend/test_rep_quality_rules.py
+      - name: Compose contract
+        env:
+          POSTGRES_PASSWORD: ci-disposable-password
+          JWT_SECRET: ci-only-private-jwt-value-at-least-32-characters
+        run: docker compose -f deploy/storage-compose.yml config --quiet
+      - name: Build deployment image
+        run: docker build -f backend/Dockerfile -t fitness-storage-ci .
+      - name: Container health and restart
+        run: |
+          docker volume create fitness-ci-media
+          docker run -d --name fitness-storage-smoke --network host --memory 1280m --cpus 2 -v fitness-ci-media:/data -e DATABASE_URL -e ENV=production -e JWT_SECRET=ci-only-private-jwt-value-at-least-32-characters -e MQTT_ENABLED=false -e POSE_WARMUP_ENABLED=false -e AI_AGENT_BACKGROUND_ENABLED=false fitness-storage-ci
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/health >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:8080/health
+          docker restart --time 120 fitness-storage-smoke
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/health >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:8080/health
+          docker exec fitness-storage-smoke python -m storage doctor
+          docker stop --time 120 fitness-storage-smoke
+      - name: Container diagnostics
+        if: always()
+        run: docker logs fitness-storage-smoke 2>/dev/null || true

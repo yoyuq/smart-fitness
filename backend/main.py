@@ -21,8 +21,9 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import sqlite3
@@ -193,11 +194,16 @@ def start_mqtt():
 
 @app.on_event("startup")
 async def startup():
+    if os.getenv('ENV','').lower()=='production':
+        secret=os.getenv('JWT_SECRET','')
+        if len(secret)<32 or secret=='smart-fitness-dev-secret-change-in-prod':raise RuntimeError('Production JWT_SECRET must be private and at least 32 characters')
+        from storage.media import MediaService
+        MediaService().signing_key()
     from storage.media_jobs import start as start_media_jobs
     start_media_jobs()
     if os.getenv('MQTT_ENABLED','true').lower() not in ('false','0','no'):
         start_mqtt()
-    print("[Backend] Server started - MQTT handler active")
+    print("[Backend] Server started")
     # Pose engine warmup (避免第一次推理冷启动 2s 卡顿)
     try:
         import asyncio
@@ -273,6 +279,23 @@ class SensorReading(BaseModel):
     accel_x: Optional[float] = None
     accel_y: Optional[float] = None
     accel_z: Optional[float] = None
+
+
+class TelemetryBatch(BaseModel):
+    poses: List[PoseFrame] = []
+    sensors: List[SensorReading] = []
+
+
+@app.post('/api/sessions/{session_id}/telemetry/batch')
+async def telemetry_batch(session_id: str, batch: TelemetryBatch, request: Request):
+    import auth
+    from storage.telemetry import write_batch
+    header=request.headers.get('authorization','')
+    user=auth.verify_token(header[7:]) if header.startswith('Bearer ') else None
+    if not user:return JSONResponse({'error':'unauthorized'},status_code=401)
+    try:return write_batch(session_id,user['user_id'],batch.poses,batch.sensors)
+    except PermissionError:return JSONResponse({'error':'session not found'},status_code=404)
+    except ValueError as exc:return JSONResponse({'error':str(exc)},status_code=400)
 
 
 class FeedbackMessage(BaseModel):

@@ -12,7 +12,7 @@ migrate_v3.py — Smart Fitness V3 数据库迁移脚本
 
 用法:
   python migrate_v3.py [--db PATH] [--dry-run]
-  默认 DB 路径: ../fitness_v2.db  (相对 backend/)
+  默认 DB 路径: 与服务端 DB_PATH/FITNESS_DB_PATH 一致
   环境变量 FITNESS_DB_PATH 优先于默认值。
 
 行为:
@@ -120,12 +120,12 @@ V3_TABLES = [
 def _resolve_db_path(arg: str | None) -> Path:
     if arg:
         return Path(arg).expanduser().resolve()
-    env = os.environ.get("FITNESS_DB_PATH")
-    if env:
-        return Path(env).expanduser().resolve()
-    # 默认: backend/migrate_v3.py 的上级目录下的 fitness_v2.db
-    here = Path(__file__).resolve().parent
-    return (here.parent / "fitness_v2.db").resolve()
+    from storage.database import default_sqlite_path,database_url
+    if not database_url().startswith('sqlite:'):
+        raise ValueError('Use python -m storage upgrade for PostgreSQL; --db is SQLite-only')
+    from sqlalchemy.engine import make_url
+    url=make_url(database_url())
+    return Path(url.database).resolve()
 
 
 def _list_tables(conn: sqlite3.Connection) -> list[str]:
@@ -143,7 +143,7 @@ def _row_count(conn: sqlite3.Connection, table: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smart Fitness V3 DB migration")
-    parser.add_argument("--db", help="SQLite DB path (default: ../fitness_v2.db)")
+    parser.add_argument("--db", help="SQLite DB path (default: configured SQLite database)")
     parser.add_argument("--dry-run", action="store_true", help="只打印将执行的 DDL")
     args = parser.parse_args()
 

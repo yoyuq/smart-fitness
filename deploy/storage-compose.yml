@@ -1,0 +1,52 @@
+name: fitness-storage
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fitness}
+      POSTGRES_USER: ${POSTGRES_USER:-fitness}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    mem_limit: 512m
+    stop_grace_period: 90s
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENV: production
+      DB_ENGINE: postgresql
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-fitness}
+      POSTGRES_USER: ${POSTGRES_USER:-fitness}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+      JWT_SECRET: ${JWT_SECRET:?Set a private JWT secret with at least 32 characters}
+      MEDIA_BACKEND: ${MEDIA_BACKEND:-local}
+      COS_BUCKET: ${COS_BUCKET:-}
+      COS_REGION: ${COS_REGION:-}
+      COS_SECRET_ID: ${COS_SECRET_ID:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_SESSION_TOKEN: ${COS_SESSION_TOKEN:-}
+      MQTT_ENABLED: 'false'
+      POSE_WARMUP_ENABLED: 'false'
+      AI_AGENT_BACKGROUND_ENABLED: 'false'
+    ports:
+      - 127.0.0.1:8080:8080
+    volumes:
+      - media:/data
+    restart: unless-stopped
+    mem_limit: 1280m
+    stop_grace_period: 120s
+volumes:
+  pgdata:
+  media:

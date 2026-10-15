@@ -47,6 +47,11 @@ if __name__ == '__main__':
             p.add_argument('--writers-stopped',action='store_true',required=True)
             p.add_argument('--allow-legacy-orphans',action='store_true')
     export=sub.add_parser('export-recovery');export.add_argument('--output',required=True);export.add_argument('--report',required=True);export.add_argument('--writers-stopped',action='store_true',required=True)
+    sub.add_parser('media-status')
+    retry=sub.add_parser('retry-media');retry.add_argument('--limit',type=int,default=25)
+    doctor=sub.add_parser('doctor');doctor.add_argument('--probe-cos',action='store_true')
+    media=sub.add_parser('media-import');media.add_argument('--source-root',required=True);media.add_argument('--apply',action='store_true');media.add_argument('--report',required=True)
+    retain=sub.add_parser('retention');retain.add_argument('--before',type=float,required=True);retain.add_argument('--apply',action='store_true');retain.add_argument('--report',required=True)
     args=parser.parse_args()
     report_path=report_destination(args) if hasattr(args,'report') else None
     from .transfer import snapshot, classify, import_sqlite, export_recovery
@@ -63,7 +68,21 @@ if __name__ == '__main__':
             else:report=import_sqlite(sources,database_url(),allow_legacy_orphans=args.allow_legacy_orphans)
         write_report(report_path,report)
         print('Storage report written; row contents and credentials omitted')
-    else:
+    elif args.command=='export-recovery':
         report=export_recovery(database_url(),args.output)
         write_report(report_path,report)
         print('Verified recovery export written')
+
+    elif args.command in ('media-status','retry-media','doctor','media-import','retention'):
+        from . import ops
+        if args.command=='media-status':report=ops.status()
+        elif args.command=='retry-media':
+            from .media import MediaService
+            report=MediaService().retry_pending(args.limit);report.update(ops.status())
+        elif args.command=='doctor':report=ops.doctor(args.probe_cos)
+        elif args.command=='media-import':report=ops.import_media(args.source_root,args.apply)
+        else:report=ops.retain_telemetry(args.before,args.apply)
+        if report_path:write_report(report_path,report)
+        else:print(json.dumps(report))
+        if args.command=='doctor' and not report['ready']:raise SystemExit(2)
+        if args.command=='retry-media' and any(v for k,v in report['states'].items() if k not in ('ready','deleted')):raise SystemExit(2)
