@@ -10,15 +10,21 @@ import sqlalchemy as sa
 SPEC = json.loads(Path(__file__).with_name('schema_v1.json').read_text(encoding='utf-8'))
 EXTRA_REP_COLUMNS = [('landmarks','TEXT'),('model_quality','REAL'),('evidence_score','REAL'),('evidence_deficits','TEXT'),('evidence_used','TEXT')]
 
-def current_spec():
+MEDIA_SPEC = dict(columns=[dict(name=name,type=typ,nullable=nullable,default=default,pk=pk) for name,typ,nullable,default,pk in [
+    ('resource_key','TEXT',False,None,1),('user_id','INTEGER',False,None,0),('session_id','TEXT',True,None,0),('backend','TEXT',False,None,0),('status','TEXT',False,None,0),('attempts','INTEGER',False,'0',0),('sha256','TEXT',False,None,0),('byte_size','INTEGER',False,None,0),('error_type','TEXT',True,None,0),('created_at','REAL',False,None,0),('updated_at','REAL',False,None,0)]],indexes=[dict(name='idx_media_pending',unique=False,origin='c',columns=['status','updated_at'])],autoincrement=False,relations=[dict(column='user_id',table='users',target='id'),dict(column='session_id',table='sessions',target='session_id')])
+
+def current_spec(version=3):
     spec=json.loads(json.dumps(SPEC))
     spec['rep_scores']['columns'].extend(dict(name=name,type=typ,nullable=True,default=None,pk=0) for name,typ in EXTRA_REP_COLUMNS)
+    if version>=3:
+        spec['media_objects']=MEDIA_SPEC
+        spec['devices']['columns'].extend(dict(name=name,type=typ,nullable=True,default=None,pk=0) for name,typ in [('token','TEXT'),('registered_at','REAL')])
     return spec
 
 
 def metadata(dialect='postgresql', version=1):
     meta = sa.MetaData()
-    for name, spec in (SPEC if version==1 else current_spec()).items():
+    for name, spec in (SPEC if version==1 else current_spec(version)).items():
         columns = []
         for c in spec['columns']:
             typ = sa.Integer if c['type'] == 'INTEGER' else sa.Double if c['type'] == 'REAL' else sa.Text
@@ -42,7 +48,7 @@ def metadata(dialect='postgresql', version=1):
 
 
 def initialize_sqlite(engine):
-    meta = metadata('sqlite', version=2)
+    meta = metadata('sqlite', version=3)
     with engine.begin() as conn:
         # SQLite serializes DDL across processes before any check/create race.
         conn.exec_driver_sql('BEGIN IMMEDIATE')

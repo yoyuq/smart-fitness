@@ -98,6 +98,9 @@ if os.path.isdir(_STATIC_DIR):
     async def pwa_redirect():
         return RedirectResponse("/static/index.html")
 
+from storage.media_routes import router as media_router
+app.include_router(media_router)
+
 # ---------- Database Setup ----------
 
 DB_PATH = default_sqlite_path()
@@ -190,12 +193,16 @@ def start_mqtt():
 
 @app.on_event("startup")
 async def startup():
-    start_mqtt()
+    from storage.media_jobs import start as start_media_jobs
+    start_media_jobs()
+    if os.getenv('MQTT_ENABLED','true').lower() not in ('false','0','no'):
+        start_mqtt()
     print("[Backend] Server started - MQTT handler active")
     # Pose engine warmup (避免第一次推理冷启动 2s 卡顿)
     try:
         import asyncio
         async def _warmup():
+            if os.getenv('POSE_WARMUP_ENABLED','true').lower() in ('false','0','no'):return
             try:
                 import sys, os
                 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ml_pose"))
@@ -224,6 +231,8 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    from storage.media_jobs import stop as stop_media_jobs
+    await stop_media_jobs()
     try:
         from fitness_agent.background_scheduler import stop_background_scheduler
         await stop_background_scheduler()

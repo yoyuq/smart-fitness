@@ -44,7 +44,8 @@ except Exception as _e:
 # ============================================================
 from collections import deque as _deque
 _frame_buffers: Dict[str, Any] = {}
-REP_FRAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "rep_frames")
+from storage.media import MediaService, media_root, rep_urls
+REP_FRAME_DIR = str(media_root() / "rep_frames")
 
 
 def _frame_buffer_key(device_id: str, session_id: Optional[str] = None) -> str:
@@ -85,14 +86,7 @@ def _clear_device_frame_buffer(device_id: str):
 # ============================================================
 LAST_INFER: Dict[str, Any] = {}   # device_id -> 最新推理 payload(内存)
 
-# 历史关键帧/完整片段静态服务 (监控台回放用)
-try:
-    from fastapi.staticfiles import StaticFiles as _SF
-    _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-    if os.path.isdir(_DATA_DIR):
-        app.mount("/repdata", _SF(directory=_DATA_DIR), name="repdata")
-except Exception as _e:
-    log.warning(f"repdata mount failed: {_e}")
+# Historical media is served only through storage.media_routes.
 
 
 def _latest_device() -> Optional[str]:
@@ -181,44 +175,21 @@ def monitor_history(limit: int = 40, exercise: Optional[str] = None):
 
 
 @app.get("/api/v2/monitor/clip/{rep_id}")
-def monitor_clip(rep_id: int):
-    """一次 rep 的画面: 3 关键帧(历史都有) + 完整片段帧(新录的才有)."""
-    conn = get_db()
+def monitor_clip(rep_id: int, req: Request):
+    user=_require_user(req)
+    if not user:return JSONResponse({"ok":False,"error":"unauthorized"},status_code=401)
+    conn=get_db()
     try:
-        r = conn.execute("SELECT session_id, rep_index, start_frame, peak_frame, end_frame, clip_dir "
-                         "FROM rep_scores WHERE id=?", (rep_id,)).fetchone()
-    finally:
-        conn.close()
-    if not r:
-        return JSONResponse({"ok": False}, status_code=404)
-
-    def _url(relpath):
-        if not relpath:
-            return None
-        p = relpath.replace("\\", "/")
-        i = p.find("data/")
-        return ("/repdata/" + p[i + 5:]) if i >= 0 else None
-
-    keyframes = {k.replace("_frame", ""): _url(r[k]) for k in ("start_frame", "peak_frame", "end_frame")}
-    frames = []
-    if r["clip_dir"]:
-        p = r["clip_dir"].replace("\\", "/")
-        i = p.find("data/")
-        if i >= 0:
-            sub = p[i + 5:]
-            d = os.path.join(os.path.dirname(os.path.abspath(__file__)), p[i:])
-        else:
-            sub = p
-            d = os.path.join(os.path.dirname(REP_FRAME_DIR), p)
-    else:
-        sess = r["session_id"] or "nosession"
-        sub = f"rep_clips/{sess}/rep{r['rep_index']:03d}"
-        d = os.path.join(os.path.dirname(REP_FRAME_DIR), "rep_clips", sess, f"rep{r['rep_index']:03d}")
-    if os.path.isdir(d):
-        for fn in sorted(os.listdir(d)):
-            if fn.endswith(".jpg"):
-                frames.append(f"/repdata/{sub}/{fn}")
-    return JSONResponse({"ok": True, "keyframes": keyframes, "frames": frames, "has_clip": len(frames) > 0})
+        row=conn.execute("SELECT r.* FROM rep_scores r JOIN sessions s ON s.session_id=r.session_id WHERE r.id=? AND s.user_id=CAST(? AS TEXT)",(rep_id,user["user_id"])).fetchone()
+        if not row:return JSONResponse({"ok":False},status_code=404)
+        images=rep_urls(dict(row),user["user_id"],conn=conn)
+        service=MediaService()
+        keyframes={}
+        for col in ("start_frame","peak_frame","end_frame"):
+            try:keyframes[col.replace('_frame','')]=service.url(row[col],user['user_id'],conn) if row[col] else None
+            except (FileNotFoundError,ValueError,PermissionError):keyframes[col.replace('_frame','')]=None
+        return JSONResponse({"ok":True,"keyframes":keyframes,"frames":images["frames"],"has_clip":bool(images["frames"])})
+    finally:conn.close()
 
 
 @app.get("/api/v2/monitor/eval")
@@ -419,6 +390,8 @@ def monitor_session_get():
 
 @app.post("/api/v2/monitor/session/start")
 async def monitor_session_start(req: Request):
+    user=_require_user(req)
+    if not user:return JSONResponse({"ok":False,"error":"unauthorized"},status_code=401)
     try:
         body = await req.json()
     except Exception:
@@ -426,9 +399,17 @@ async def monitor_session_start(req: Request):
     ex = (body.get("exercise") or "").strip()
     if ex:
         _MON["exercise"] = ex
+    user_id = str(user["user_id"])
+    device_id,exercise=_MON["device"],_MON["exercise"]
+    from uuid import uuid4
+    session_id = f"sess_{user_id}_{uuid4().hex[:12]}"
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO sessions(session_id,device_id,user_id,exercise_type,start_time,status) VALUES (?,?,?,?,?,?)", (session_id,device_id,str(user_id),exercise,time.time(),"active"))
+        conn.commit()
+    finally:
+        conn.close()
     _MON["recording"] = True
-    user_id = str(body.get("user_id") or _MON.get("user_id") or "31")
-    session_id = f"sess_{user_id}_{int(time.time())}"
     _MON["user_id"] = int(user_id) if str(user_id).isdigit() else user_id
     active_trainings[_MON["device"]] = {
         "user_id": int(user_id) if str(user_id).isdigit() else user_id,
@@ -445,9 +426,19 @@ async def monitor_session_start(req: Request):
 
 
 @app.post("/api/v2/monitor/session/stop")
-async def monitor_session_stop():
+async def monitor_session_stop(req: Request):
+    user=_require_user(req)
+    if not user:return JSONResponse({"ok":False,"error":"unauthorized"},status_code=401)
+    current=active_trainings.get(_MON["device"])
+    if current and str(current["user_id"])!=str(user["user_id"]):return JSONResponse({"ok":False},status_code=403)
     _MON["recording"] = False
     sess = active_trainings.pop(_MON["device"], None)
+    if sess:
+        conn=get_db()
+        try:
+            conn.execute("UPDATE sessions SET end_time=?,status='completed',total_reps=(SELECT count(*) FROM rep_scores WHERE session_id=?),avg_form_score=(SELECT avg(total) FROM rep_scores WHERE session_id=?) WHERE session_id=?",(time.time(),sess["session_id"],sess["session_id"],sess["session_id"]))
+            conn.commit()
+        finally:conn.close()
     log.info(f"monitor recording STOP sid={sess.get('session_id') if sess else None}")
     return JSONResponse({"ok": True, "recording": False, "session_id": sess.get("session_id") if sess else None})
 
@@ -468,43 +459,24 @@ async def monitor_session_exercise(req: Request):
 
 @app.post("/api/v2/monitor/rep_delete")
 async def rep_delete(req: Request):
-    """删除一条误触发/无效的 rep(回看时发现没真做). 连带删关键帧+片段文件."""
-    import shutil
-    body = await req.json()
-    rep_id = body.get("rep_id")
-    if rep_id is None:
-        return JSONResponse({"ok": False, "error": "rep_id required"}, status_code=400)
+    user=_require_user(req)
+    if not user:return JSONResponse({"ok":False,"error":"unauthorized"},status_code=401)
+    body=await req.json();rep_id=body.get("rep_id")
+    if rep_id is None:return JSONResponse({"ok":False,"error":"rep_id required"},status_code=400)
+    conn=get_db()
     try:
-        conn = get_db()
-        _ensure_label_cols(conn)
-        row = conn.execute("SELECT session_id, rep_index, start_frame, peak_frame, end_frame, clip_dir "
-                           "FROM rep_scores WHERE id=?", (int(rep_id),)).fetchone()
-        conn.execute("DELETE FROM rep_scores WHERE id=?", (int(rep_id),))
-        conn.commit()
-        stats = _label_counts(conn)
-        conn.close()
-        if row:
-            base = os.path.dirname(os.path.abspath(__file__))
-            for p in (row["start_frame"], row["peak_frame"], row["end_frame"]):
-                try:
-                    if p:
-                        os.remove(os.path.join(base, p))
-                except Exception:
-                    pass
-            try:
-                clip_rel = row["clip_dir"] if "clip_dir" in row.keys() else None
-                if clip_rel:
-                    clip = os.path.join(base, clip_rel)
-                else:
-                    sess = row["session_id"]; ri = row["rep_index"]
-                    clip = os.path.join(os.path.dirname(REP_FRAME_DIR), "rep_clips", sess, f"rep{int(ri):03d}") if sess and ri is not None else None
-                if clip:
-                    shutil.rmtree(clip, ignore_errors=True)
-            except Exception:
-                pass
-        return JSONResponse({"ok": True, "deleted": int(rep_id), **stats})
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+        row=conn.execute("SELECT r.* FROM rep_scores r JOIN sessions s ON s.session_id=r.session_id WHERE r.id=? AND s.user_id=CAST(? AS TEXT)",(int(rep_id),user["user_id"])).fetchone()
+        if not row:return JSONResponse({"ok":False},status_code=404)
+        service=MediaService();keys={row[col] for col in ("start_frame","peak_frame","end_frame") if row[col]}
+        pending=service.delete_prefix(row["clip_dir"],user["user_id"],conn) if row["clip_dir"] else 0
+        for key in tuple(keys):
+            pending+=service.delete_prefix(str(key).replace('\\','/').rsplit('/',1)[0],user["user_id"],conn)
+        for key in keys:
+            try:pending+=not service.delete(key,user["user_id"],conn)
+            except FileNotFoundError:pass
+        conn.execute("DELETE FROM rep_scores WHERE id=?",(int(rep_id),));conn.commit()
+        return JSONResponse({"ok":True,"deleted":int(rep_id),"pending_media_deletions":pending,**_label_counts(conn)})
+    finally:conn.close()
 
 
 @app.get("/api/v2/monitor/rep/{rep_id}")
@@ -530,60 +502,53 @@ def monitor_rep(rep_id: int):
 
 
 def _save_rep_keyframes(device_id: str, session_id: str, rep: Dict) -> Dict[str, Optional[str]]:
-    """按 rep 的 start/peak/end 时间戳从缓冲取最近帧落盘, 返回相对路径."""
     out = {"start_frame": None, "peak_frame": None, "end_frame": None}
     buf = _frame_buffers.get(_frame_buffer_key(device_id, session_id)) or _frame_buffers.get(device_id)
-    if not buf:
+    if not buf or not session_id:
         return out
-    frames = list(buf)
-    clip_id = rep.get("clip_id") or f"rep{rep['rep_index']:03d}_{int((rep.get('ts') or time.time()) * 1000)}"
-    sess_dir = os.path.join(REP_FRAME_DIR, session_id or "nosession", clip_id)
-    os.makedirs(sess_dir, exist_ok=True)
-    for key, ts_key in (("start_frame", "start_ts"), ("peak_frame", "peak_ts"), ("end_frame", "end_ts")):
-        target = rep.get(ts_key)
-        if target is None:
-            continue
-        nearest = min(frames, key=lambda f: abs(f[0] - target))
-        if abs(nearest[0] - target) > 3.0:   # 缓冲里没有足够近的帧
-            continue
-        fname = f"{key.split('_')[0]}.jpg"
-        fpath = os.path.join(sess_dir, fname)
-        try:
-            with open(fpath, "wb") as f:
-                f.write(nearest[1])
-            out[key] = os.path.relpath(fpath, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            log.warning(f"rep keyframe save failed: {e}")
+    service=MediaService();conn=get_db()
+    try:
+        row=conn.execute("SELECT user_id FROM sessions WHERE session_id=?",(session_id,)).fetchone()
+        if not row or row[0] is None:return out
+        owner=int(row[0])
+    finally:conn.close()
+    clip_id=rep.get("clip_id") or f"rep{rep['rep_index']:03d}_{int((rep.get('ts') or time.time())*1000)}"
+    for key,ts_key in (("start_frame","start_ts"),("peak_frame","peak_ts"),("end_frame","end_ts")):
+        target=rep.get(ts_key)
+        if target is None:continue
+        nearest=min(list(buf),key=lambda frame:abs(frame[0]-target))
+        if abs(nearest[0]-target)>3:continue
+        resource=f"rep_frames/{session_id}/{clip_id}/{key.split('_')[0]}.jpg"
+        out[key]=service.publish(resource,nearest[1],owner,session_id)
     return out
 
 
 def _save_rep_clip(device_id: str, session_id: str, rep: Dict, max_frames: int = 120) -> Optional[str]:
-    """把一次 rep 的全部缓冲帧落盘成片段(供监控台回放完整动作)."""
-    buf = _frame_buffers.get(_frame_buffer_key(device_id, session_id)) or _frame_buffers.get(device_id)
-    if not buf:
-        return None
-    s = rep.get("start_ts"); e = rep.get("end_ts")
-    frames = [(ts, jb) for (ts, jb) in list(buf)
-              if (s is None or ts >= s - 0.1) and (e is None or ts <= e + 0.1)]
-    if len(frames) < 2:
-        return None
-    if len(frames) > max_frames:
-        sel = [int(i * (len(frames) - 1) / (max_frames - 1)) for i in range(max_frames)]
-        frames = [frames[i] for i in sel]
-    clip_root = os.path.join(os.path.dirname(REP_FRAME_DIR), "rep_clips")
-    clip_id = rep.get("clip_id") or f"rep{rep.get('rep_index', 0):03d}_{int((rep.get('ts') or time.time()) * 1000)}"
-    d = os.path.join(clip_root, session_id or "nosession", clip_id)
+    buf = _frame_buffers.get(_frame_buffer_key(device_id,session_id)) or _frame_buffers.get(device_id)
+    if not buf or not session_id:return None
+    start,end=rep.get("start_ts"),rep.get("end_ts")
+    frames=[frame for frame in list(buf) if (start is None or frame[0]>=start-0.1) and (end is None or frame[0]<=end+0.1)]
+    if len(frames)<2:return None
+    max_frames=max(2,min(120,int(max_frames)))
+    if len(frames)>max_frames:frames=[frames[int(i*(len(frames)-1)/(max_frames-1))] for i in range(max_frames)]
+    conn=get_db()
     try:
-        if os.path.isdir(d):
-            shutil.rmtree(d, ignore_errors=True)
-        os.makedirs(d, exist_ok=True)
-        for i, (ts, jb) in enumerate(frames):
-            with open(os.path.join(d, f"f{i:03d}.jpg"), "wb") as f:
-                f.write(jb)
-        return os.path.relpath(d, os.path.dirname(os.path.abspath(__file__)))
-    except Exception as ex:
-        log.warning(f"rep clip save failed: {ex}")
-        return None
+        row=conn.execute("SELECT user_id FROM sessions WHERE session_id=?",(session_id,)).fetchone()
+        if not row or row[0] is None:return None
+        owner=int(row[0])
+    finally:conn.close()
+    clip_id=rep.get("clip_id") or f"rep{rep.get('rep_index',0):03d}_{int((rep.get('ts') or time.time())*1000)}"
+    prefix=f"rep_clips/{session_id}/{clip_id}"
+    service=MediaService()
+    for i,(_,data) in enumerate(frames):
+        try:service.publish(f"{prefix}/f{i:03d}.jpg",data,owner,session_id)
+        except ValueError:
+            check=get_db()
+            try:
+                if service.prefix_deleted(check,f"{prefix}/f{i:03d}.jpg"):return None
+            finally:check.close()
+            raise
+    return prefix
 
 
 def _get_detector(device_id: str, target_exercise: Optional[str] = None) -> Optional[Any]:
@@ -782,14 +747,8 @@ async def v2_train_start(req: Request):
     body = await req.json()
     device_id = (body.get("device_id") or "").strip()
     # user_id 优先从 JWT 取, fallback 到 body
-    user_id = body.get("user_id")
-    if not user_id:
-        try:
-            import auth
-            u = auth.require_auth(req.headers.get("Authorization") or req.headers.get("authorization"))
-            if u: user_id = u.get("user_id")
-        except Exception:
-            pass
+    user = _require_user(req)
+    user_id = user['user_id'] if user else body.get('user_id')
     # 兼容 APP 字段名: exercise / exercise_type
     exercise = (body.get("exercise") or body.get("exercise_type") or "squat").strip() or "squat"
     # 模式: guidance(指导动作-逐次实时矫正) | complete(完整运动-结束出报告). 默认 complete
@@ -798,7 +757,14 @@ async def v2_train_start(req: Request):
         mode = "complete"
     if not device_id or not user_id:
         return JSONResponse({"ok": False, "error": "device_id and user_id required"}, status_code=400)
-    session_id = f"sess_{user_id}_{int(time.time())}"
+    from uuid import uuid4
+    session_id = f"sess_{user_id}_{uuid4().hex[:12]}"
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO sessions(session_id,device_id,user_id,exercise_type,start_time,status) VALUES (?,?,?,?,?,?)", (session_id,device_id,str(user_id),exercise,time.time(),"active"))
+        conn.commit()
+    finally:
+        conn.close()
     active_trainings[device_id] = {
         "user_id": int(user_id),
         "exercise": exercise,
@@ -884,7 +850,14 @@ async def v2_vision_infer_full(req: Request):
         body_exercise = (body.get("exercise") or body.get("exercise_type") or "").strip() or None
         allow_auto_revive = not (device_id == _MON.get("device") and not _MON.get("recording"))
         if allow_auto_revive and device_id and body_user_id and body_exercise:
-            new_sid = f"sess_{body_user_id}_{int(time.time())}"
+            from uuid import uuid4
+            authenticated=_require_user(req)
+            if authenticated:body_user_id=authenticated['user_id']
+            new_sid = f"sess_{body_user_id}_{uuid4().hex[:12]}"
+            conn=get_db()
+            try:
+                conn.execute("INSERT INTO sessions(session_id,device_id,user_id,exercise_type,start_time,status) VALUES (?,?,?,?,?,?)",(new_sid,device_id,str(body_user_id),body_exercise,time.time(),'active'));conn.commit()
+            finally:conn.close()
             active_trainings[device_id] = {
                 "user_id": int(body_user_id),
                 "exercise": body_exercise,
@@ -1016,7 +989,7 @@ async def v2_vision_infer_full(req: Request):
                                             args=(device_id or "default", session_id, dict(completed_rep)),
                                             daemon=True,
                                         ).start()
-                                        clip_dir = os.path.join("data", "rep_clips", session_id or "nosession", clip_id)
+                                        clip_dir = "/".join(("rep_clips", session_id or "nosession", clip_id))
                                         conn_r = get_db()
                                         _rs.ensure_table(conn_r)
                                         conn_r.execute(
