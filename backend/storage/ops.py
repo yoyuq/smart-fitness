@@ -16,6 +16,28 @@ def status():
     finally:conn.close()
 
 
+def database_writable(engine):
+    from .schema import current_spec
+    import uuid
+    conn=engine.connect();transaction=conn.begin()
+    try:
+        if engine.dialect.name=='postgresql':
+            for name,spec in current_spec().items():
+                for permission in ('SELECT','INSERT','UPDATE','DELETE'):
+                    if not conn.execute(sa.text('SELECT has_table_privilege(:table,:permission)'),{'table':name,'permission':permission}).scalar():return False
+                if spec['autoincrement']:
+                    pk=next(c['name'] for c in spec['columns'] if c['pk'])
+                    for permission in ('USAGE','SELECT'):
+                        if not conn.execute(sa.text('SELECT has_sequence_privilege(pg_get_serial_sequence(:table,:pk),:permission)'),{'table':name,'pk':pk,'permission':permission}).scalar():return False
+        key='monitor/doctor-'+uuid.uuid4().hex+'/probe.bin'
+        conn.execute(sa.text("INSERT INTO media_objects(resource_key,user_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (:key,0,'local','staging',0,:sha,0,0,0)"),{'key':key,'sha':'0'*64})
+        if conn.execute(sa.text("UPDATE media_objects SET status='pending' WHERE resource_key=:key"),{'key':key}).rowcount!=1:raise RuntimeError('Write probe update failed')
+        if conn.execute(sa.text('DELETE FROM media_objects WHERE resource_key=:key'),{'key':key}).rowcount!=1:raise RuntimeError('Write probe delete failed')
+        return True
+    except Exception:return False
+    finally:transaction.rollback();conn.close()
+
+
 def doctor(probe_cos=False):
     engine=engine_for(database_url());service=MediaService()
     with engine.connect() as conn:
@@ -41,7 +63,8 @@ def doctor(probe_cos=False):
         finally:store.client.delete_object(Bucket=store.bucket,Key=key)
     jwt=os.getenv('JWT_SECRET','')
     result['auth_ready']=os.getenv('ENV','').lower()!='production' or (len(jwt)>=32 and jwt!='smart-fitness-dev-secret-change-in-prod')
-    result['ready']=result['schema_current'] and configured and signing_ready and result['auth_ready']
+    result['database_writable']=database_writable(engine) if result['schema_current'] else False
+    result['ready']=result['schema_current'] and result['database_writable'] and configured and signing_ready and result['auth_ready']
     return result
 
 
@@ -56,7 +79,7 @@ def import_media(source_root,apply=False,max_files=10000):
             report['examined']+=1
             if report['examined']>max_files:raise ValueError('Media import file bound exceeded')
             key=resource_key(path.relative_to(root).as_posix());owner=service.owner(conn,key);row=service.row(conn,key)
-            if row and row['status'] in ('deleted','delete_pending'):report['tombstoned']+=1;continue
+            if service.prefix_deleted(conn,key) or (row and row['status'] in ('deleted','delete_pending')):report['tombstoned']+=1;continue
             if owner is None:report['unowned']+=1;continue
             report['owned']+=1
             if apply:

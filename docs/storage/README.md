@@ -38,11 +38,11 @@ Unknown columns/tables, conflicting IDs/content, nonempty target and invalid rel
 
 ## COS media
 
-`MEDIA_DATA_ROOT` is a persistent writable cache. `COS_REGION/BUCKET/SECRET_ID/SECRET_KEY` select a private HTTPS bucket; temporary credentials may use `COS_SESSION_TOKEN`. Restrict credentials to the application object prefixes. `python -m storage doctor --probe-cos` performs a real temporary put/get/sign/delete and requires explicit configured credentials; plain `doctor` does not contact COS. A passing SDK contract test is not a live bucket test.
+`MEDIA_DATA_ROOT` is a persistent writable cache. `COS_REGION/BUCKET/SECRET_ID/SECRET_KEY` select a private HTTPS bucket; temporary credentials may use `COS_SESSION_TOKEN`. Restrict credentials to the application object prefixes. `python -m storage doctor --probe-cos` performs a real temporary put/get/sign/delete and requires explicit configured credentials; plain `doctor` does not contact COS. It checks required table/sequence privileges and rolls back a real database INSERT/UPDATE/DELETE probe; no test row remains. A passing SDK contract test is not a live bucket test.
 
 Stable `rep_frames/...` and `rep_clips/...` keys replace machine paths. New camera writes first stage durable local bytes, then enter the upload outbox; cloud I/O does not block ingestion. Restart recovers complete staging files. An incomplete staging file becomes a reported terminal failure after a grace period. Checksums verify cached/downloaded data. AI tools materialize cloud frames into the same cache. Changing the cache root still permits ownership-checked reads from the legacy `backend/data` root; use `media-import` to make those assets explicit before moving to another machine.
 
-Deletion has persistent prefix tombstones so late clip frames and in-flight uploads cannot resurrect deleted rep media. A late ambiguous upload schedules compensating deletion. Existing COS signed links may last until their expiry or object deletion; their maximum lifetime is 300 seconds. Keep the catalog and cache until queue work completes. No automatic cache eviction is enabled.
+Deletion has persistent prefix tombstones so late clip frames and in-flight uploads cannot resurrect deleted rep media. A late ambiguous upload schedules compensating deletion and invalidates earlier DELETE acknowledgements. Existing COS signed links may last until their expiry or object deletion; their maximum lifetime is 300 seconds. Keep the catalog and cache until queue work completes. No automatic cache eviction is enabled.
 
 ## Recovery preserving post-switch writes
 

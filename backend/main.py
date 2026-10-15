@@ -286,6 +286,20 @@ class TelemetryBatch(BaseModel):
     sensors: List[SensorReading] = []
 
 
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith('/api/sessions/') and request.url.path.endswith('/telemetry/batch'):
+        # Invalid numeric input (e.g. NaN for an integer) must not be echoed
+        # into strict JSON serialization and turn a validation error into 500.
+        details=[{key:error[key] for key in ('loc','msg','type')} for error in exc.errors()]
+        return JSONResponse({'detail':details},status_code=422)
+    return await request_validation_exception_handler(request,exc)
+
+
 @app.post('/api/sessions/{session_id}/telemetry/batch')
 async def telemetry_batch(session_id: str, batch: TelemetryBatch, request: Request):
     import auth

@@ -6,8 +6,13 @@ from .database import connect
 
 def write_batch(session_id,user_id,poses,sensors):
     if not 1<=len(poses)+len(sensors)<=1000:raise ValueError('Batch requires 1 to 1000 records')
-    for record in [*poses,*sensors]:
-        if not math.isfinite(record.timestamp):raise ValueError('Timestamp must be finite')
+    def finite(value):
+        if isinstance(value,float) and not math.isfinite(value):raise ValueError('Telemetry numbers must be finite')
+        if isinstance(value,dict):
+            for item in value.values():finite(item)
+        elif isinstance(value,(list,tuple)):
+            for item in value:finite(item)
+    for record in [*poses,*sensors]:finite(record.model_dump())
     conn=connect()
     try:
         row=conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(session_id,)).fetchone()

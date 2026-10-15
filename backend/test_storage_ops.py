@@ -88,3 +88,71 @@ def test_legacy_migration_uses_actual_configured_sqlite(monkeypatch,tmp_path):
     monkeypatch.setenv('DATABASE_URL','postgresql+psycopg://synthetic:synthetic@localhost/db')
     with pytest.raises(ValueError,match='storage upgrade'):_resolve_db_path(None)
     assert _resolve_db_path(str(target))==target
+
+def test_media_import_skips_deleted_prefix_for_uncatalogued_frames(assets,tmp_path):
+    from storage.media import MediaService
+    uid,sid,data,_=assets;prefix=f'rep_clips/{sid}/previously-deleted';MediaService().delete_prefix(prefix,uid)
+    source=tmp_path/'old-backup';path=source/prefix/'f999.jpg';path.parent.mkdir(parents=True);path.write_bytes(data)
+    for apply in (False,True):
+        report=ops.import_media(source,apply)
+        assert report['tombstoned']==1 and report['owned']==0 and report['queued_or_ready']==0
+
+
+def test_postgres_doctor_rejects_readonly_and_missing_sequence_permissions(monkeypatch,tmp_path):
+    import sqlalchemy as sa
+    from storage.database import database_url,engine_for
+    from storage.__main__ import upgrade
+    url=sa.engine.make_url(database_url())
+    if url.get_backend_name()!='postgresql':pytest.skip('PostgreSQL role privileges')
+    admin=sa.create_engine(url,isolation_level='AUTOCOMMIT',hide_parameters=True)
+    with admin.connect() as conn:
+        if not conn.exec_driver_sql('SELECT rolsuper FROM pg_roles WHERE rolname=current_user').scalar():
+            admin.dispose();pytest.skip('Disposable DB/role probe requires test superuser')
+    role='probe_role_'+uuid.uuid4().hex[:12];database='doctor_probe_'+uuid.uuid4().hex[:12]
+    target=url.set(database=database);role_url=target.update_query_dict({'options':'-c role='+role})
+    target_text=target.render_as_string(hide_password=False);role_text=role_url.render_as_string(hide_password=False)
+    created_role=created_db=False;engine=None
+    monkeypatch.setenv('ENV','production');monkeypatch.setenv('JWT_SECRET','test-only-private-jwt-secret-more-than-32-characters');monkeypatch.setenv('MEDIA_BACKEND','local');monkeypatch.setenv('MEDIA_DATA_ROOT',str(tmp_path/'media'))
+    try:
+        with admin.connect() as conn:
+            conn.exec_driver_sql('CREATE ROLE '+role+' NOLOGIN');created_role=True
+            conn.exec_driver_sql('CREATE DATABASE '+database);created_db=True
+        monkeypatch.setenv('DATABASE_URL',target_text);upgrade()
+        engine=sa.create_engine(target,hide_parameters=True)
+        with engine.begin() as conn:
+            conn.exec_driver_sql('GRANT CONNECT ON DATABASE '+database+' TO '+role)
+            conn.exec_driver_sql('GRANT USAGE ON SCHEMA public TO '+role)
+            conn.exec_driver_sql('GRANT SELECT ON ALL TABLES IN SCHEMA public TO '+role)
+        monkeypatch.setenv('DATABASE_URL',role_text)
+        report=ops.doctor();assert report['schema_current'] and not report['database_writable'] and not report['ready']
+        with engine.begin() as conn:conn.exec_driver_sql('GRANT INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO '+role)
+        assert not ops.doctor()['ready']  # Table grants alone do not allow SERIAL inserts.
+        with engine.begin() as conn:conn.exec_driver_sql('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO '+role)
+        assert ops.doctor()['ready']
+        with engine.connect() as conn:assert conn.exec_driver_sql('SELECT count(*) FROM media_objects').scalar()==0
+    finally:
+        engine_for(role_text).dispose();engine_for(target_text).dispose()
+        if engine:engine.dispose()
+        with admin.connect() as conn:
+            if created_db:conn.exec_driver_sql('DROP DATABASE '+database+' WITH (FORCE)')
+            if created_role:conn.exec_driver_sql('DROP ROLE '+role)
+        admin.dispose()
+
+def test_batch_rejects_all_nonfinite_numbers_without_partial_rows():
+    import json,copy
+    from main import app
+    user,sid=fixture_session();client=TestClient(app);headers={'Authorization':'Bearer '+user['token'],'Content-Type':'application/json'}
+    template={'poses':[{'timestamp':123,'exercise_type':'squat','rep_count':1,'form_score':80,'angles':{'knee':90},'landmarks':[{'x':.5}]}],'sensors':[{'timestamp':124,'heart_rate':75}]}
+    cases=[('poses','form_score'),('poses','rep_count'),('poses','timestamp'),('poses','angles'),('poses','landmarks')]+[('sensors',name) for name in ('timestamp','heart_rate','hr_confidence','movement_intensity','body_angle','accel_x','accel_y','accel_z')]
+    for value in (float('nan'),float('inf'),float('-inf')):
+        for kind,field in cases:
+            payload=copy.deepcopy(template)
+            if field=='angles':payload[kind][0][field]['knee']=value
+            elif field=='landmarks':payload[kind][0][field][0]['x']=value
+            else:payload[kind][0][field]=value
+            response=client.post(f'/api/sessions/{sid}/telemetry/batch',content=json.dumps(payload),headers=headers)
+            assert response.status_code in (400,422),(kind,field,response.status_code)
+    conn=connect()
+    try:
+        for table in ('pose_data','sensor_data'):assert conn.execute(f'SELECT count(*) FROM {table} WHERE session_id=?',(sid,)).fetchone()[0]==0
+    finally:conn.close()
