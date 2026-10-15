@@ -331,3 +331,31 @@ def test_postgres_prefix_lock_prevents_mvcc_phantom(assets,monkeypatch):
         release.set();deleter.join(10);writer.join(10);probe.close()
     assert not deleter.is_alive() and not writer.is_alive() and errors==['barrier_rejected']
     assert sdk.calls==0 and not sdk.objects
+
+def test_delete_ack_after_late_put_keeps_cleanup_intent(assets,monkeypatch):
+    import threading
+    uid,sid,data,_=assets;monkeypatch.setenv('MEDIA_BACKEND','cos')
+    put_entered=threading.Event();put_finish=threading.Event();delete_done=threading.Event();delete_ack=threading.Event();errors=[]
+    class DelayedSdk(FakeSdk):
+        def put_object(self,**kwargs):
+            put_entered.set();assert put_finish.wait(10);super().put_object(**kwargs)
+        def delete_object(self,**kwargs):
+            super().delete_object(**kwargs);delete_done.set();assert delete_ack.wait(10)
+    sdk=DelayedSdk();service=MediaService(CosStore(sdk,'test'));key=f'rep_frames/{sid}/delete-ack.jpg';service.publish(key,data,uid,sid)
+    def upload():
+        try:service.retry_key(key)
+        except Exception as exc:errors.append(exc)
+    def remove():
+        try:service.delete(key,uid)
+        except Exception as exc:errors.append(exc)
+    uploader=threading.Thread(target=upload);deleter=threading.Thread(target=remove)
+    uploader.start();assert put_entered.wait(10);deleter.start()
+    try:
+        assert delete_done.wait(10);put_finish.set();uploader.join(10);assert not uploader.is_alive()
+        assert key in sdk.objects
+    finally:
+        put_finish.set();delete_ack.set();uploader.join(10);deleter.join(10)
+    assert not errors and not deleter.is_alive()
+    with pytest.raises(PermissionError):service.url(key,uid)
+    service.retry_pending()
+    assert key not in sdk.objects,'An old DELETE acknowledgement must not discard cleanup of a newer PUT'

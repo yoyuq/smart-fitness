@@ -65,3 +65,8 @@ def initialize_sqlite(engine):
         for table in meta.tables.values():
             for index in table.indexes:
                 index.create(conn, checkfirst=True)
+
+
+def index_matches(conn,table,expected):
+    actual=next((item for item in sa.inspect(conn).get_indexes(table) if item['name']==expected['name']),None)
+    return bool(actual and actual['column_names']==expected['columns'] and bool(actual['unique'])==bool(expected['unique']))

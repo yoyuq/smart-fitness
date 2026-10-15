@@ -66,6 +66,12 @@ def root():
 
 @app.get("/api/ai/health")
 def health():
+    db_ready=False
+    try:
+        conn=get_db()
+        try:db_ready=conn.execute('SELECT 1').fetchone()[0]==1
+        finally:conn.close()
+    except Exception:pass
     s = ai_planner.provider_status()
     return {
         "ok": True,
@@ -73,7 +79,7 @@ def health():
         "deepseek_key_set": s["deepseek_key_set"],
         "volc_key_set": s["volc_key_set"],
         "model": s["volc_model"] if s["volc_key_set"] else s["deepseek_model"],
-        "db_exists": os.path.exists(DB_PATH),
+        "db_exists": db_ready,
     }
 
 

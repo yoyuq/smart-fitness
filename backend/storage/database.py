@@ -13,7 +13,12 @@ def default_sqlite_path():
     return str(Path(os.environ.get("DB_PATH") or os.environ.get("FITNESS_DB_PATH") or BACKEND_ROOT / "fitness.db").expanduser().resolve())
 
 def database_source(source=None):
-    return os.environ.get("DATABASE_URL") or source or default_sqlite_path()
+    if os.environ.get("DATABASE_URL"):return os.environ["DATABASE_URL"]
+    if os.environ.get('DB_ENGINE','').lower()=='postgresql':
+        required=('POSTGRES_USER','POSTGRES_PASSWORD','POSTGRES_DB')
+        if any(not os.environ.get(name) for name in required):raise ValueError('PostgreSQL user, password and database must be configured')
+        return sa.URL.create('postgresql+psycopg',username=os.environ['POSTGRES_USER'],password=os.environ['POSTGRES_PASSWORD'],host=os.environ.get('POSTGRES_HOST','127.0.0.1'),port=int(os.environ.get('POSTGRES_PORT','5432')),database=os.environ['POSTGRES_DB']).render_as_string(hide_password=False)
+    return source or default_sqlite_path()
 
 def connect(source=None, timeout=10, check_same_thread=True):
     source=database_source(source)
@@ -150,11 +155,20 @@ class Connection:
     def cursor(self):
         return Cursor(self)
     def execute(self, sql, parameters=()):
-        from .schema import SPEC
+        from .schema import SPEC,index_matches
         ddl = re.match(r'\s*CREATE TABLE IF NOT EXISTS\s+(\w+)', sql, re.I)
         if ddl and ddl[1] in SPEC:
             if not sa.inspect(self.raw).has_table(ddl[1]):
                 raise RuntimeError('Database schema is missing; run storage upgrade')
+            return Cursor(self)
+        index=re.match(r'\s*CREATE\s+(UNIQUE\s+)?INDEX\s+IF NOT EXISTS\s+(\w+)\s+ON\s+(\w+)\s*\(([^)]+)\)\s*;?\s*$',sql,re.I|re.S)
+        if index:
+            expected=next((item for item in SPEC.get(index[3],{}).get('indexes',[]) if item['name']==index[2]),None)
+            columns=[part.strip().split()[0] for part in index[4].split(',')]
+            if not expected or columns!=expected['columns'] or bool(index[1])!=bool(expected['unique']):
+                raise ValueError('Runtime index DDL must match the versioned schema')
+            if not index_matches(self.raw,index[3],expected):
+                raise RuntimeError('Required index is missing or mismatched; restore the deployed schema')
             return Cursor(self)
         alteration = re.match(r'\s*ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+(\w+)', sql, re.I)
         if alteration and alteration[1] in SPEC:
@@ -184,9 +198,17 @@ class Connection:
         self.total_changes += max(0, result.rowcount)
         return Cursor(self, result, row[0] if row else None)
     def executemany(self, sql, rows):
-        cur = None
-        for row in rows:
-            cur = self.execute(sql, row)
+        rows=list(rows)
+        if not rows:return Cursor(self)
+        # Plain INSERT batches do not request per-row generated IDs.
+        if re.match(r'^\s*INSERT INTO\s+\w+\s*\(',sql,re.I) and not re.search(r'\b(RETURNING|CONFLICT)\b',sql,re.I):
+            bound,args=bind_qmarks(sql,rows[0])
+            parameters=[args]+[bind_qmarks(sql,row)[1] for row in rows[1:]]
+            with self.raw.begin_nested():result=self.raw.execute(sa.text(bound),parameters)
+            self.total_changes+=max(0,result.rowcount)
+            return Cursor(self,result)
+        cur=None
+        for row in rows:cur=self.execute(sql,row)
         return cur or Cursor(self)
     def executescript(self, sql):
         # Repository DDL only; SQLite's script API never binds user content.

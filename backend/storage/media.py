@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 import time
+from uuid import uuid4
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlencode
 from .database import BACKEND_ROOT, connect, table_exists
@@ -175,14 +176,16 @@ class MediaService:
             if row['status'] in ('ready','deleted'):return True
             if row['status']=='delete_pending':
                 for _ in range(3):
-                    changed=conn.execute("UPDATE media_objects SET attempts=attempts+1,updated_at=? WHERE resource_key=? AND attempts<9 AND status='delete_pending'",(time.time(),key));conn.commit()
+                    token='delete_inflight:'+uuid4().hex
+                    changed=conn.execute("UPDATE media_objects SET attempts=attempts+1,error_type=?,updated_at=? WHERE resource_key=? AND attempts<9 AND status='delete_pending'",(token,time.time(),key));conn.commit()
                     if changed.rowcount<=0:return False
                     try:
                         if row['backend']=='cos':self.cos.client.delete_object(Bucket=self.cos.bucket,Key=key)
                         local_path(key).unlink(missing_ok=True)
-                        conn.execute("UPDATE media_objects SET status='deleted',error_type=NULL,updated_at=? WHERE resource_key=?",(time.time(),key));conn.commit();return True
+                        changed=conn.execute("UPDATE media_objects SET status='deleted',error_type=NULL,updated_at=? WHERE resource_key=? AND status='delete_pending' AND error_type=?",(time.time(),key,token));conn.commit()
+                        return changed.rowcount>0
                     except Exception as exc:
-                        conn.execute('UPDATE media_objects SET error_type=?,updated_at=? WHERE resource_key=?',(type(exc).__name__,time.time(),key));conn.commit()
+                        conn.execute("UPDATE media_objects SET error_type=?,updated_at=? WHERE resource_key=? AND status='delete_pending' AND error_type=?",(type(exc).__name__,time.time(),key,token));conn.commit()
                 return False
             path=local_path(key)
             if row['status']=='staging':
@@ -209,8 +212,8 @@ class MediaService:
                     changed=conn.execute("UPDATE media_objects SET status='ready',error_type=NULL,updated_at=? WHERE resource_key=? AND status IN ('pending','failed')",(time.time(),key));conn.commit()
                     if changed.rowcount<=0:
                         current=self.row(conn,key)
-                        if current['status']=='deleted':
-                            conn.execute("UPDATE media_objects SET status='delete_pending',attempts=0,error_type='late_upload_cleanup',updated_at=? WHERE resource_key=? AND status='deleted'",(time.time(),key));conn.commit()
+                        if current['status'] in ('deleted','delete_pending'):
+                            self.late_upload(conn,key)
                         return current['status']=='ready'
                     return True
                 except Exception as exc:
@@ -218,10 +221,14 @@ class MediaService:
                     current=self.row(conn,key)
                     if current['status'] in ('deleted','delete_pending'):
                         # Timeout may mean PUT succeeded remotely after DELETE.
-                        conn.execute("UPDATE media_objects SET status='delete_pending',attempts=0,error_type='late_upload_cleanup',updated_at=? WHERE resource_key=? AND status='deleted'",(time.time(),key));conn.commit()
+                        self.late_upload(conn,key)
                         return False
             return False
         finally:conn.close()
+    def late_upload(self,conn,key):
+        # Invalidate even an active DELETE token: its server-side effect may
+        # precede this PUT while its acknowledgement arrives afterward.
+        conn.execute("UPDATE media_objects SET attempts=CASE WHEN status='deleted' THEN 0 ELSE attempts END,status='delete_pending',error_type='late_upload_cleanup',updated_at=? WHERE resource_key=? AND status IN ('deleted','delete_pending')",(time.time(),key));conn.commit()
     def retry_pending(self,limit=25,stop_event=None):
         conn=connect()
         try:keys=[r[0] for r in conn.execute("SELECT resource_key FROM media_objects WHERE status IN ('staging','pending','failed','delete_pending') AND attempts<9 ORDER BY updated_at LIMIT ?",(min(100,max(1,int(limit))),)).fetchall()]
