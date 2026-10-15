@@ -155,11 +155,20 @@ class Connection:
     def cursor(self):
         return Cursor(self)
     def execute(self, sql, parameters=()):
-        from .schema import SPEC
+        from .schema import SPEC,index_matches
         ddl = re.match(r'\s*CREATE TABLE IF NOT EXISTS\s+(\w+)', sql, re.I)
         if ddl and ddl[1] in SPEC:
             if not sa.inspect(self.raw).has_table(ddl[1]):
                 raise RuntimeError('Database schema is missing; run storage upgrade')
+            return Cursor(self)
+        index=re.match(r'\s*CREATE\s+(UNIQUE\s+)?INDEX\s+IF NOT EXISTS\s+(\w+)\s+ON\s+(\w+)\s*\(([^)]+)\)\s*;?\s*$',sql,re.I|re.S)
+        if index:
+            expected=next((item for item in SPEC.get(index[3],{}).get('indexes',[]) if item['name']==index[2]),None)
+            columns=[part.strip().split()[0] for part in index[4].split(',')]
+            if not expected or columns!=expected['columns'] or bool(index[1])!=bool(expected['unique']):
+                raise ValueError('Runtime index DDL must match the versioned schema')
+            if not index_matches(self.raw,index[3],expected):
+                raise RuntimeError('Required index is missing or mismatched; restore the deployed schema')
             return Cursor(self)
         alteration = re.match(r'\s*ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+(\w+)', sql, re.I)
         if alteration and alteration[1] in SPEC:

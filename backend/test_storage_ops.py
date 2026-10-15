@@ -129,7 +129,30 @@ def test_postgres_doctor_rejects_readonly_and_missing_sequence_permissions(monke
         assert not ops.doctor()['ready']  # Table grants alone do not allow SERIAL inserts.
         with engine.begin() as conn:conn.exec_driver_sql('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO '+role)
         assert ops.doctor()['ready']
+        # The app must actually work with DML grants and no table ownership/DDL.
+        from fitness_agent.history import add_agent_chat_message,get_agent_chat_history
+        from fitness_agent.memory import add_layered_memory,build_memory_snapshot
+        from fitness_agent.permissions import create_approval,list_pending_approvals
+        import auth
+        assert auth.register('role_business_'+uuid.uuid4().hex,'test-password')['ok']
+        app_conn=connect()
+        try:
+            assert get_agent_chat_history(app_conn,1)==[]
+            add_agent_chat_message(app_conn,1,'user','generated role test')
+            assert len(get_agent_chat_history(app_conn,1))==1
+            assert add_layered_memory(app_conn,1,'generated storage role memory')
+            assert build_memory_snapshot(app_conn,1)
+            assert create_approval(app_conn,1,'save_body_metrics',{},'generated test')
+            assert len(list_pending_approvals(app_conn,1))==1
+        finally:app_conn.close()
         with engine.connect() as conn:assert conn.exec_driver_sql('SELECT count(*) FROM media_objects').scalar()==0
+        # A stamped but damaged schema must not trigger request-time DDL.
+        with engine.begin() as conn:conn.exec_driver_sql('DROP INDEX idx_agent_chat_user_id_id')
+        assert not ops.doctor()['ready']
+        app_conn=connect()
+        try:
+            with pytest.raises(RuntimeError,match='index is missing'):get_agent_chat_history(app_conn,1)
+        finally:app_conn.close()
     finally:
         engine_for(role_text).dispose();engine_for(target_text).dispose()
         if engine:engine.dispose()

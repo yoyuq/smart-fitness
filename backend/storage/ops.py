@@ -17,12 +17,14 @@ def status():
 
 
 def database_writable(engine):
-    from .schema import current_spec
+    from .schema import current_spec,index_matches
     import uuid
     conn=engine.connect();transaction=conn.begin()
     try:
         if engine.dialect.name=='postgresql':
             for name,spec in current_spec().items():
+                for index in spec['indexes']:
+                    if index['origin']=='c' and not index_matches(conn,name,index):return False
                 for permission in ('SELECT','INSERT','UPDATE','DELETE'):
                     if not conn.execute(sa.text('SELECT has_table_privilege(:table,:permission)'),{'table':name,'permission':permission}).scalar():return False
                 if spec['autoincrement']:
