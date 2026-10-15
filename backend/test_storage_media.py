@@ -292,3 +292,42 @@ def test_prefix_delete_intents_survive_crash_before_first_delete(assets,monkeypa
         with pytest.raises(RuntimeError):service.delete_prefix(prefix,uid)
     restarted=MediaService(CosStore(sdk,'test'));assert restarted.retry_pending()['ready']>=2
     assert not any(k.startswith(prefix+'/') for k in sdk.objects)
+
+def test_postgres_prefix_lock_prevents_mvcc_phantom(assets,monkeypatch):
+    import threading
+    import storage.media as media
+    uid,sid,data,_=assets;probe=connect()
+    if not hasattr(probe,'raw'):probe.close();pytest.skip('PostgreSQL advisory-lock concurrency')
+    monkeypatch.setenv('MEDIA_BACKEND','cos');sdk=FakeSdk();service=MediaService(CosStore(sdk,'test'));prefix=f'rep_clips/{sid}/phantom';key=prefix+'/late.jpg'
+    before_commit=threading.Event();release=threading.Event();publisher_entered=threading.Event();errors=[];pid=[];real_connect=media.connect;real_lock=MediaService.lock_prefixes
+    class PausedCommit:
+        def __init__(self,conn):self.conn=conn
+        def __getattr__(self,name):return getattr(self.conn,name)
+        def commit(self):before_commit.set();assert release.wait(10);return self.conn.commit()
+    def connection(*args,**kwargs):
+        conn=real_connect(*args,**kwargs)
+        return PausedCommit(conn) if threading.current_thread().name=='prefix-deleter' else conn
+    def lock(self,conn,target,is_prefix=False):
+        if target==key:
+            pid.append(conn.execute('SELECT pg_backend_pid()').fetchone()[0]);publisher_entered.set()
+        return real_lock(self,conn,target,is_prefix)
+    monkeypatch.setattr(media,'connect',connection);monkeypatch.setattr(MediaService,'lock_prefixes',lock)
+    def remove():
+        try:service.delete_prefix(prefix,uid)
+        except Exception as exc:errors.append(exc)
+    def publish():
+        try:service.publish(key,data,uid,sid)
+        except ValueError:errors.append('barrier_rejected')
+    deleter=threading.Thread(target=remove,name='prefix-deleter');writer=threading.Thread(target=publish)
+    deleter.start();assert before_commit.wait(10);writer.start();assert publisher_entered.wait(10)
+    try:
+        waiting=False
+        for _ in range(100):
+            row=probe.execute('SELECT wait_event FROM pg_stat_activity WHERE pid=?',(pid[0],)).fetchone();probe.commit()
+            if row and row[0]=='advisory':waiting=True;break
+            time.sleep(.01)
+        assert waiting,'Publisher must wait for the deleting transaction, not observe an absent uncommitted marker'
+    finally:
+        release.set();deleter.join(10);writer.join(10);probe.close()
+    assert not deleter.is_alive() and not writer.is_alive() and errors==['barrier_rejected']
+    assert sdk.calls==0 and not sdk.objects

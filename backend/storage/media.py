@@ -102,6 +102,16 @@ class MediaService:
         row=conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(parts[1],)).fetchone()
         try:return int(row[0]) if row and row[0] is not None else None
         except (ValueError,TypeError):return None
+    def lock_prefixes(self,conn,key,is_prefix=False):
+        parts=resource_key(key).split('/')
+        if hasattr(conn,'raw'):
+            # Shared cross-process locks close the MVCC phantom window between
+            # checking the barrier and claiming a new immutable child row.
+            for end in range(2,len(parts)+(1 if is_prefix else 0)):
+                prefix='/'.join(parts[:end])
+                lock=int.from_bytes(hashlib.sha256(prefix.encode()).digest()[:8],'big',signed=True)
+                conn.execute('SELECT pg_advisory_xact_lock(?)',(lock,))
+        elif not conn.in_transaction:conn.execute('BEGIN IMMEDIATE')
     def prefix_deleted(self,conn,key):
         parts=resource_key(key).split('/')
         for end in range(2,len(parts)):
@@ -120,6 +130,7 @@ class MediaService:
         digest=hashlib.sha256(data).hexdigest();now=time.time()
         conn=connect()
         try:
+            self.lock_prefixes(conn,key)
             if session_id:
                 session=conn.execute('SELECT user_id FROM sessions WHERE session_id=?',(session_id,)).fetchone()
                 if not session or str(session[0])!=str(user_id):raise PermissionError('Media session owner mismatch')
@@ -258,6 +269,7 @@ class MediaService:
     def delete_prefix(self,prefix,user_id,conn=None):
         prefix=resource_key(prefix).rstrip('/');owned=conn is None;conn=conn or connect()
         try:
+            self.lock_prefixes(conn,prefix,is_prefix=True)
             if self.owner(conn,prefix+'/placeholder.jpg')!=int(user_id):raise PermissionError('Media prefix owner mismatch')
             now=time.time();marker=prefix+'/_prefix_tombstone'
             conn.execute("INSERT INTO media_objects(resource_key,user_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (?,?,'local','deleted',0,?,0,?,?) ON CONFLICT(resource_key) DO NOTHING",(marker,int(user_id),hashlib.sha256(b'').hexdigest(),now,now))
