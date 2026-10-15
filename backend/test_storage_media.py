@@ -280,3 +280,15 @@ def test_real_clip_writer_cancelled_by_rep_delete(assets,monkeypatch):
     assert not thread.is_alive() and result==[None]
     with pytest.raises(PermissionError):MediaService().keys(prefix,uid)
     assert not local_path(prefix+'/f001.jpg').exists()
+
+def test_prefix_delete_intents_survive_crash_before_first_delete(assets,monkeypatch):
+    uid,sid,data,_=assets;monkeypatch.setenv('MEDIA_BACKEND','cos')
+    sdk=FakeSdk();service=MediaService(CosStore(sdk,'test'));prefix=f'rep_clips/{sid}/delete-crash'
+    for i in range(2):
+        key=f'{prefix}/f{i:03d}.jpg';service.publish(key,data,uid,sid);assert service.retry_key(key)
+    with monkeypatch.context() as patch:
+        def interrupted(*args,**kwargs):raise RuntimeError('simulated process interruption')
+        patch.setattr(service,'delete',interrupted)
+        with pytest.raises(RuntimeError):service.delete_prefix(prefix,uid)
+    restarted=MediaService(CosStore(sdk,'test'));assert restarted.retry_pending()['ready']>=2
+    assert not any(k.startswith(prefix+'/') for k in sdk.objects)

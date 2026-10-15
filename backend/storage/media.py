@@ -260,8 +260,11 @@ class MediaService:
         try:
             if self.owner(conn,prefix+'/placeholder.jpg')!=int(user_id):raise PermissionError('Media prefix owner mismatch')
             now=time.time();marker=prefix+'/_prefix_tombstone'
-            conn.execute("INSERT INTO media_objects(resource_key,user_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (?,?,'local','deleted',0,?,0,?,?) ON CONFLICT(resource_key) DO NOTHING",(marker,int(user_id),hashlib.sha256(b'').hexdigest(),now,now));conn.commit()
+            conn.execute("INSERT INTO media_objects(resource_key,user_id,backend,status,attempts,sha256,byte_size,created_at,updated_at) VALUES (?,?,'local','deleted',0,?,0,?,?) ON CONFLICT(resource_key) DO NOTHING",(marker,int(user_id),hashlib.sha256(b'').hexdigest(),now,now))
             escaped=prefix.replace('!','!!').replace('%','!%').replace('_','!_')+'/%'
+            # Commit every known cleanup intent with the prefix barrier. A crash
+            # before the first external DELETE must remain resumable.
+            conn.execute("UPDATE media_objects SET status='delete_pending',attempts=CASE WHEN status='delete_pending' THEN attempts ELSE 0 END,updated_at=? WHERE user_id=? AND resource_key LIKE ? ESCAPE '!' AND status!='deleted'",(now,int(user_id),escaped));conn.commit()
             keys=[r[0] for r in conn.execute("SELECT resource_key FROM media_objects WHERE user_id=? AND resource_key LIKE ? ESCAPE '!' AND status!='deleted'",(int(user_id),escaped)).fetchall()]
             directory=local_path(prefix)
             if directory.is_dir():keys+= [prefix+'/'+p.name for p in directory.iterdir() if p.is_file() and p.suffix.lower() in ('.jpg','.jpeg','.png')]
