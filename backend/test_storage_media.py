@@ -300,13 +300,13 @@ def test_postgres_prefix_lock_prevents_mvcc_phantom(assets,monkeypatch):
     if not hasattr(probe,'raw'):probe.close();pytest.skip('PostgreSQL advisory-lock concurrency')
     monkeypatch.setenv('MEDIA_BACKEND','cos');sdk=FakeSdk();service=MediaService(CosStore(sdk,'test'));prefix=f'rep_clips/{sid}/phantom';key=prefix+'/late.jpg'
     before_commit=threading.Event();release=threading.Event();publisher_entered=threading.Event();errors=[];pid=[];real_connect=media.connect;real_lock=MediaService.lock_prefixes
-    class PausedCommit:
-        def __init__(self,conn):self.conn=conn
-        def __getattr__(self,name):return getattr(self.conn,name)
-        def commit(self):before_commit.set();assert release.wait(10);return self.conn.commit()
     def connection(*args,**kwargs):
         conn=real_connect(*args,**kwargs)
-        return PausedCommit(conn) if threading.current_thread().name=='prefix-deleter' else conn
+        if threading.current_thread().name=='prefix-deleter':
+            commit=conn.commit
+            def paused():before_commit.set();assert release.wait(10);return commit()
+            conn.commit=paused
+        return conn
     def lock(self,conn,target,is_prefix=False):
         if target==key:
             pid.append(conn.execute('SELECT pg_backend_pid()').fetchone()[0]);publisher_entered.set()
@@ -319,7 +319,7 @@ def test_postgres_prefix_lock_prevents_mvcc_phantom(assets,monkeypatch):
         try:service.publish(key,data,uid,sid)
         except ValueError:errors.append('barrier_rejected')
     deleter=threading.Thread(target=remove,name='prefix-deleter');writer=threading.Thread(target=publish)
-    deleter.start();assert before_commit.wait(10);writer.start();assert publisher_entered.wait(10)
+    deleter.start();assert before_commit.wait(10), errors;writer.start();assert publisher_entered.wait(10)
     try:
         waiting=False
         for _ in range(100):
