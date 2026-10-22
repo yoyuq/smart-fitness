@@ -754,6 +754,62 @@ async def x_fitness_agent_history(req: Request, limit: int = 50):
         c.close()
 
 
+@app.get("/api/v2/agent/history/search")
+async def x_fitness_agent_history_search(req: Request, q: str = "", limit: int = 50):
+    """Search the current user's chat history for messages matching a query.
+
+    Query parameters:
+      q: search string (required; 1..200 chars after stripping whitespace)
+      limit: max results (optional; true integer 1..200; default 50)
+
+    Returns:
+      401 if no valid auth token
+      422 if q is missing/blank/too-long or limit is invalid
+      200 with {ok: true, messages: [...]} on success
+    """
+    u = _user(req)
+    if not u:
+        return _unauth()
+
+    # Validate q: must be a non-blank string up to 200 chars after stripping.
+    if not isinstance(q, str):
+        return JSONResponse(
+            {"ok": False, "error": "invalid_query", "detail": "q must be a string"},
+            status_code=422,
+        )
+    q_stripped = q.strip()
+    if len(q_stripped) < 1 or len(q_stripped) > 200:
+        return JSONResponse(
+            {"ok": False, "error": "invalid_query",
+             "detail": "q must be between 1 and 200 characters after stripping"},
+            status_code=422,
+        )
+
+    # Validate limit: must be a true integer in 1..200.
+    # FastAPI will parse numeric query strings as int; we still need to reject
+    # booleans (which are int subclasses in Python) and out-of-range values.
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        return JSONResponse(
+            {"ok": False, "error": "invalid_limit", "detail": "limit must be an integer"},
+            status_code=422,
+        )
+    if limit < 1 or limit > 200:
+        return JSONResponse(
+            {"ok": False, "error": "invalid_limit",
+             "detail": "limit must be between 1 and 200"},
+            status_code=422,
+        )
+
+    c = _db()
+    try:
+        messages = fitness_agent.search_agent_chat_history(
+            c, u["user_id"], q_stripped, limit=limit
+        )
+        return JSONResponse({"ok": True, "messages": messages})
+    finally:
+        c.close()
+
+
 @app.delete("/api/v2/agent/history")
 async def x_fitness_agent_history_clear(req: Request):
     """Clear persisted Fitness Agent chat history for the current user."""
