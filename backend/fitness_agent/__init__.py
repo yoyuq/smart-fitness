@@ -33,6 +33,7 @@ from .history import (
     delete_agent_chat_history,
     ensure_agent_chat_schema,
     get_agent_chat_history,
+    search_agent_chat_history,
     to_llm_history,
 )
 from .hooks import clear_hooks, register_default_hooks, register_hook, trigger_hooks
@@ -113,6 +114,7 @@ __all__ = [
     "resume_run_after_approval",
     "resume_run_after_denial",
     "run_background_checks",
+    "search_agent_chat_history",
     "search_fitness_web",
     "search_knowledge",
     "start_run",
