@@ -198,12 +198,32 @@ python -m fitness_agent.mcp_server
 - `POST /api/v2/agent/nutrition_plan`
 - `GET /api/v2/agent/history?limit=50`
 - `DELETE /api/v2/agent/history`
+- `GET /api/v2/agent/history/search?q=...&limit=50`
 - `GET /api/v2/agent/kb`
 - `GET /api/v2/agent/runs?limit=20`
 - `GET /api/v2/agent/runs/{run_id}`
 - `GET /api/v2/agent/approvals`
 - `POST /api/v2/agent/approvals/{approval_id}/approve`
 - `POST /api/v2/agent/approvals/{approval_id}/deny`
+
+## 历史消息搜索
+
+`GET /api/v2/agent/history/search` 提供按关键词搜索当前用户聊天历史的能力：
+
+- **鉴权**：需要有效的 Bearer token；未登录返回 `401`。
+- **参数**：
+  - `q`：搜索关键词，去空格后长度 1~200；缺失/空/过长返回 `422`。
+  - `limit`：返回最大条数，真整数 1~200，默认 50；非法值返回 `422`。
+- **匹配**：ASCII 不区分大小写，中文等字符按字面匹配；`%`、`_` 等 LIKE 通配符会被转义当作字面量。
+- **返回**：`{ok: true, messages: [...]}`，消息按 ID 升序（时间从早到晚）排列；只返回当前用户的消息。
+- **结果形状**：与 `GET /api/v2/agent/history` 一致，包含 `id/role/content/mode/domains/created_at`。
+
+示例：
+
+```http
+GET /api/v2/agent/history/search?q=增肌&limit=20
+Authorization: Bearer <token>
+```
 
 ## Approval Resume
 
