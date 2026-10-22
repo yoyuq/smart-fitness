@@ -100,6 +100,91 @@ def get_agent_chat_history(conn: sqlite3.Connection, user_id: int, limit: int = 
     return out
 
 
+def search_agent_chat_history(
+    conn: sqlite3.Connection,
+    user_id: int,
+    query: str,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """Search a user's chat history for messages containing the given query.
+
+    Args:
+        conn: SQLite database connection.
+        user_id: The user whose history to search (authorization boundary).
+        query: Substring to search for. Stripped; must be 1..200 chars after stripping.
+        limit: Maximum number of results to return. Must be a true integer in 1..200.
+            Booleans, strings, floats, and None are rejected.
+
+    Returns:
+        List of message dicts (same shape as get_agent_chat_history) in ID
+        ascending (chronological) order.  The latest ``limit`` matching rows
+        are selected and then returned oldest-first.
+
+    Raises:
+        ValueError: If query or limit fails validation.  Raised before any
+            schema writes or database queries.
+    """
+    # --- Input validation (before any DB access) ---
+    if not isinstance(query, str):
+        raise ValueError("query must be a string")
+    query = query.strip()
+    if len(query) < 1 or len(query) > 200:
+        raise ValueError("query must be between 1 and 200 characters after stripping")
+
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        raise ValueError("limit must be a true integer")
+    if limit < 1 or limit > 200:
+        raise ValueError("limit must be between 1 and 200")
+
+    # --- DB access ---
+    ensure_agent_chat_schema(conn)
+
+    # Use LIKE with escaped wildcards for literal substring matching.
+    # Escape % _ and the escape character itself so they are treated literally.
+    escape_char = "\\"
+    like_pattern = "%" + _escape_like(query, escape_char) + "%"
+
+    rows = conn.execute(
+        """
+        SELECT id, role, content, mode, domains_json, created_at
+        FROM agent_chat_messages
+        WHERE user_id=?
+          AND content LIKE ? ESCAPE ?
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (user_id, like_pattern, escape_char, limit),
+    ).fetchall()
+
+    out: List[Dict[str, Any]] = []
+    for r in reversed(rows):
+        try:
+            domains = json.loads(r["domains_json"] or "[]")
+        except Exception:
+            domains = []
+        out.append({
+            "id": r["id"],
+            "role": r["role"],
+            "content": _sanitize_agent_content(r["content"]) if r["role"] == "assistant" else r["content"],
+            "mode": r["mode"] or "auto",
+            "domains": domains if isinstance(domains, list) else [],
+            "created_at": r["created_at"],
+        })
+    return out
+
+
+def _escape_like(text: str, escape_char: str = "\\") -> str:
+    """Escape LIKE wildcard characters so they are matched literally.
+
+    Escapes the escape character itself first, then % and _.
+    """
+    return (
+        text.replace(escape_char, escape_char + escape_char)
+            .replace("%", escape_char + "%")
+            .replace("_", escape_char + "_")
+    )
+
+
 def delete_agent_chat_history(conn: sqlite3.Connection, user_id: int) -> int:
     ensure_agent_chat_schema(conn)
     cur = conn.execute("DELETE FROM agent_chat_messages WHERE user_id=?", (user_id,))
