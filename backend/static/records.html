@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f5f8f6">
+  <title>训练记录 · Smart Fitness</title>
+  <link rel="stylesheet" href="records.css">
+  <script src="records.js" defer></script>
+</head>
+<body>
+  <svg class="svg-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M7 9h10M7 15h10M4 8v8M7 5v14M17 5v14M20 8v8"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m10 5-7 7 7 7M3 12h18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m6 12 4 4 8-8"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-report" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H5V3h2M14 3v5h4M8 12h7M8 16h5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M19 10a7 7 0 0 0-12-5L4 8M5 14a7 7 0 0 0 12 5l3-3"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 5h11M9 12h11M9 19h11M4 5h.01M4 12h.01M4 19h.01"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v5M16 3v5M4 11h16M8 15h2M14 15h2"/></symbol>
+  </defs></svg>
+
+  <header class="app-header"><div class="header-inner">
+    <a class="brand" href="records.html" aria-label="Smart Fitness 训练记录"><span class="brand-mark"><svg aria-hidden="true"><use href="#i-dumbbell"/></svg></span><span>Smart Fitness</span></a>
+    <nav class="desktop-nav" aria-label="主导航"><a href="/static/index.html">实时训练</a><a href="records.html" aria-current="page">训练记录</a></nav>
+    <div class="account" id="account" hidden><span class="avatar" aria-hidden="true">练</span><span class="account-label" id="account-name"></span><button id="logout" class="text-button">退出</button></div>
+  </div></header>
+
+  <main class="main" id="main">
+    <div class="page-heading"><div><h1>训练记录</h1><p>回看训练表现，带着收获开始下一次。</p></div><span class="privacy"><svg aria-hidden="true"><use href="#i-lock"/></svg>仅自己可见</span></div>
+    <div id="workspace" class="workspace"></div>
+  </main>
+  <nav class="mobile-nav" aria-label="主导航"><a href="/static/index.html"><svg aria-hidden="true"><use href="#i-dumbbell"/></svg>实时训练</a><button id="records-nav" aria-current="page"><svg aria-hidden="true"><use href="#i-list"/></svg>训练记录</button></nav>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <noscript><p class="noscript">请启用 JavaScript，以体验筛选与详情切换。登录后可查看自己的真实训练记录。</p></noscript>
+</body>
+</html>

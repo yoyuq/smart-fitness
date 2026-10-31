@@ -12,7 +12,7 @@
 """
 import os, json, time, uuid, secrets, base64, logging, calendar
 from typing import Optional, Dict, Any
-from fastapi import Request
+from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
 import auth
@@ -405,20 +405,70 @@ async def x_stats_weekly(req: Request):
 # Sessions history
 # ============================================================
 @app.get("/api/v2/sessions/history")
-async def x_sessions_history(req: Request, user_id: Optional[int] = None, limit: int = 50):
+async def x_sessions_history(
+    req: Request, user_id: Optional[int] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    exercise: Optional[str] = Query(None, max_length=100),
+):
     u = _user(req)
     if not u:
         return _unauth()
     target_uid = u["user_id"]  # 只允许查自己的, user_id 参数忽略
     c = _db()
     try:
+        # Older databases may not have archived reports yet. Listing must still work.
+        reports_exist = c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_coach_reports'"
+        ).fetchone()
+        report_flag = (
+            "EXISTS(SELECT 1 FROM ai_coach_reports r WHERE r.session_id=s.session_id "
+            "AND r.user_id=?)" if reports_exist else "0"
+        )
+        params = [target_uid] if reports_exist else []
+        where = "s.user_id=?"
+        params.append(str(target_uid))
+        if exercise is not None:
+            where += " AND s.exercise_type=?"
+            params.append(exercise)
         rows = c.execute(
-            "SELECT session_id, device_id, user_id, exercise_type, start_time, end_time, "
-            "       total_reps, avg_form_score, status "
-            "FROM sessions WHERE user_id=? ORDER BY start_time DESC LIMIT ?",
-            (str(target_uid), limit)
+            "SELECT s.session_id, s.device_id, s.user_id, s.exercise_type, s.start_time, s.end_time, "
+            "s.total_reps, s.avg_form_score, s.status, " + report_flag + " AS has_report "
+            "FROM sessions s WHERE " + where +
+            " ORDER BY s.start_time DESC, s.session_id DESC LIMIT ? OFFSET ?",
+            (*params, limit + 1, offset),
         ).fetchall()
-        return JSONResponse({"sessions": [dict(r) for r in rows]})
+        has_more = len(rows) > limit
+        exercises = [r[0] for r in c.execute(
+            "SELECT DISTINCT exercise_type FROM sessions WHERE user_id=? "
+            "AND exercise_type IS NOT NULL ORDER BY exercise_type", (str(target_uid),)
+        )]
+        return JSONResponse({
+            "sessions": [dict(r) for r in rows[:limit]],
+            "has_more": has_more,
+            "next_offset": offset + limit if has_more else None,
+            "exercises": exercises,
+        })
+    finally:
+        c.close()
+
+
+@app.get("/api/v2/sessions/detail/{session_id}")
+async def x_session_detail(session_id: str, req: Request):
+    """Read a training session only when it belongs to the authenticated user."""
+    u = _user(req)
+    if not u:
+        return _unauth()
+    c = _db()
+    try:
+        row = c.execute(
+            "SELECT session_id, device_id, user_id, exercise_type, start_time, end_time, "
+            "total_reps, avg_form_score, status FROM sessions WHERE session_id=? AND user_id=?",
+            (session_id, str(u["user_id"])),
+        ).fetchone()
+        if row is None:
+            return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+        return {"session": dict(row)}
     finally:
         c.close()
 
