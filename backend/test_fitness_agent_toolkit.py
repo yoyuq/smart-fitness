@@ -13,6 +13,8 @@ EXPECTED_TOOLS = {
     "get_session_rep_scores",
     "get_rep_analysis",
     "get_last_training_analysis",
+    "list_ai_coach_reports",
+    "get_ai_coach_report",
     "get_scoring_evidence",
     "get_active_plans",
     "get_coach_memory",
